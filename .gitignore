@@ -28,5 +28,4 @@ Thumbs.db
 .env.*.local
 
 # Package lock files (optional, depending on workflow)
-package-lock.json
 yarn.lock
