@@ -3,7 +3,11 @@
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally with ease",
   "version": "1.0.2",
-  "publisher": "your-publisher",
+  "publisher": "Angelo Capasso",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stapeDev/it.stapedev.vscode.mokkybuddy.git"
+  },
   "engines": {
     "vscode": "^1.79.0"
   },
