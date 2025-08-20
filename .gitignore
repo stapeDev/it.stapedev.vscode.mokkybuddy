@@ -1,0 +1,32 @@
+# Node modules
+node_modules/
+
+# VS Code output / build folders
+out/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# VS Code settings
+.vscode/
+.history/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Package lock files (optional, depending on workflow)
+package-lock.json
+yarn.lock
