@@ -4,12 +4,8 @@
   "description": "Run and manage mock APIs locally with ease",
   "version": "1.0.2",
   "publisher": "your-publisher",
-  "engines": {
-    "vscode": "^1.70.0"
-  },
-  "categories": [
-    "Other"
-  ],
+  "engines": { "vscode": "^1.70.0" },
+  "categories": ["Other"],
   "activationEvents": [
     "onCommand:mokkyBuddyAPIRunner.toggleServer",
     "onCommand:mokkyBuddyAPIRunner.addAPI",
@@ -20,72 +16,34 @@
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "mokkyBuddy",
-          "title": "Mokky Buddy",
-          "icon": "resources/icon.png"
-        }
-      ]
+      "activitybar": [{"id": "mokkyBuddy","title": "Mokky Buddy","icon": "resources/icon.png"}]
     },
-    "views": {
-      "mokkyBuddy": [
-        {
-          "id": "mokkyBuddyServerView",
-          "name": "Server"
-        }
-      ]
-    },
+    "views": {"mokkyBuddy":[{"id":"mokkyBuddyServerView","name":"Server"}]},
     "commands": [
-      {
-        "command": "mokkyBuddyAPIRunner.toggleServer",
-        "title": "Start/Stop Mokky Buddy Server"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.addAPI",
-        "title": "Add API"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.deleteAPI",
-        "title": "Delete API"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.previewJson",
-        "title": "Preview JSON"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.saveAPIConfig",
-        "title": "Save API Config"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.loadAPIConfig",
-        "title": "Load API Config"
-      }
+      {"command":"mokkyBuddyAPIRunner.toggleServer","title":"Start/Stop Mokky Buddy Server"},
+      {"command":"mokkyBuddyAPIRunner.addAPI","title":"Add API"},
+      {"command":"mokkyBuddyAPIRunner.deleteAPI","title":"Delete API"},
+      {"command":"mokkyBuddyAPIRunner.previewJson","title":"Preview JSON"},
+      {"command":"mokkyBuddyAPIRunner.saveAPIConfig","title":"Save API Config"},
+      {"command":"mokkyBuddyAPIRunner.loadAPIConfig","title":"Load API Config"}
     ],
     "configuration": {
-      "type": "object",
-      "title": "Mokky Buddy Settings",
-      "properties": {
-        "mokkyBuddy.javaPath": {
-          "type": "string",
-          "default": "C:\\\\tools\\\\java\\\\jdk-17.0.15+6\\\\bin\\\\java.exe",
-          "description": "Percorso completo dell'eseguibile Java da usare per avviare il server Mokky Buddy."
-        },
-        "mokkyBuddy.serverPort": {
-          "type": "number",
-          "default": 8081,
-          "description": "Porta su cui il server Mokky Buddy sarà eseguito."
-        }
+      "type":"object",
+      "title":"Mokky Buddy Settings",
+      "properties":{
+        "mokkyBuddy.javaPath":{"type":"string","default":"C:\\\\tools\\\\java\\\\jdk-17.0.15+6\\\\bin\\\\java.exe","description":"Percorso completo dell'eseguibile Java da usare per avviare il server Mokky Buddy."},
+        "mokkyBuddy.serverPort":{"type":"number","default":8081,"description":"Porta su cui il server Mokky Buddy sarà eseguito."}
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run package",
+    "vscode:prepublish": "npm run package-prod",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package-prod": "npm run check-types && npm run lint && node esbuild.js --minify",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
