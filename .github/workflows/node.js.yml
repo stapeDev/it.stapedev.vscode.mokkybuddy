@@ -24,7 +24,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      # Checkout Java App (necessario per leggere il pom.xml e versione)
+      # Checkout Java App (per leggere il pom.xml e versione)
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
@@ -53,6 +53,12 @@ jobs:
         with:
           name: mokkybuddy-jar
           path: plugin/resources
+
+      # Rinomina il JAR scaricato per riflettere la versione e mantenere nome costante
+      - name: Rename Jar with version
+        run: |
+          VERSION=${{ steps.java_version.outputs.version }}
+          mv plugin/resources/mokkyBuddyAPI-${VERSION}.jar plugin/resources/mokkyBuddyAPI.jar
 
       # Aggiorna versione plugin in base alla Java App
       - name: Set plugin version from Java App
