@@ -42,6 +42,48 @@
 
 ---
 
+## Example JSON Configuration
+
+```json
+[
+    {
+        "method": "GET",
+        "path": "/api/user/",
+        "response": [
+            {"id": 1, "name": "Alice"},
+            {"id": 2, "name": "Bob"}
+        ]
+    },
+    {
+        "method": "GET",
+        "path": "/api/post/",
+        "response": [
+            {"id": 1, "title": "Hello World"}
+        ]
+    },
+    {
+        "method": "POST",
+        "path": "/api/user/",
+        "expectedBody": {
+            "name": "string"
+        },
+        "response":{
+                "id": 3
+        },
+        "jsonSchema":{
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "required": ["name"],
+            "properties":{
+                "name": {"type": "string"}
+            }
+        }
+    }
+]
+```
+
+---
+
 ## Commands
 
 - `Mokky Buddy: Toggle Server` — Start/stop server
