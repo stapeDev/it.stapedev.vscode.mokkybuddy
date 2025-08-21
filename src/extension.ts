@@ -257,22 +257,30 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const restartServer = async (server: ServerDef) => {
-        // Riavvia il server solo se era già attivo
         if (!server.running || !server.process) return;
     
-        // Salva la configurazione solo se il server è in esecuzione
-        const configPath = server.jsonPath ?? TEMP_CONFIG;
-        try {
-            fs.writeFileSync(configPath, JSON.stringify(server.apiList ?? [], null, 2), 'utf-8');
-            log(`💾 Config server scritta su: ${configPath}`);
-        } catch (e: any) {
-            log(`❌ Errore scrittura config: ${e?.message ?? e}`);
-            vscode.window.showErrorMessage('Errore nel salvare la configurazione attiva.');
+        // Salva solo se il server NON usa file esterno
+        if (!server.jsonPath) {
+            const configPath = TEMP_CONFIG;
+            try {
+                fs.writeFileSync(configPath, JSON.stringify(server.apiList ?? [], null, 2), 'utf-8');
+                log(`💾 Config server scritta su: ${configPath}`);
+            } catch (e: any) {
+                log(`❌ Errore scrittura config: ${e?.message ?? e}`);
+                vscode.window.showErrorMessage('Errore nel salvare la configurazione attiva.');
+            }
         }
     
         server.process.kill('SIGTERM');
         server.running = false;
         await new Promise(r => setTimeout(r, 300));
+    
+        // Quando il server è esterno, usa TEMP_CONFIG in memoria per il riavvio
+        if (server.jsonPath) {
+            const tempApiConfig = path.join(context.globalStoragePath || path.join(context.extensionPath, 'storage'), 'api-temp.json');
+            fs.writeFileSync(tempApiConfig, JSON.stringify(server.apiList ?? [], null, 2), 'utf-8');
+            server.jsonPath = undefined; // forza l'uso del TEMP_CONFIG per il riavvio
+        }
     
         await startServer(server);
     };
