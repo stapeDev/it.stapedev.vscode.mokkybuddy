@@ -103,9 +103,9 @@ jobs:
           path: plugin/*.vsix
 
       # Pubblicazione su Marketplace (opzionale)
-      # - name: Publish VSCode Plugin
-      #   if: github.ref == 'refs/heads/main'
-      #   working-directory: plugin
-      #   run: npx vsce publish
-      #   env:
-      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish VSCode Plugin
+        if: github.ref == 'refs/heads/main'
+        working-directory: plugin
+        run: npx vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
