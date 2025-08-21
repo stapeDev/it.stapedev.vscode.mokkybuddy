@@ -1,6 +1,6 @@
 # Mokky Buddy API Runner
 
-[![Build](https://github.com/stapeDev/mokky-buddy-api-runner/actions/workflows/node.js.yml/badge.svg?branch=main)](https://github.com/stapeDev/mokky-buddy-api-runner/actions/workflows/node.js.yml)  
+[![Build](https://github.com/stapeDev/it.stapedev.vscode.mokkybuddy/actions/workflows/node.js.yml/badge.svg?branch=main)](https://github.com/stapeDev/it.stapedev.vscode.mokkybuddy/actions/workflows/node.js.yml)  
 [![Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/stapedev.mokky-buddy-api-runner?label=VS%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=stapedev.mokky-buddy-api-runner)  
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.70%2B-purple)](https://code.visualstudio.com/)  
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
