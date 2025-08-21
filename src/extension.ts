@@ -60,7 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const persistUiConfig = () => { 
         try { 
-            fs.writeFileSync(UI_CONFIG_FILE, JSON.stringify(servers[0].apiList, null, 2), 'utf-8'); 
+            if (fs.existsSync(UI_CONFIG_FILE)) servers = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8'));
             log(`💾 UI config salvata su: ${UI_CONFIG_FILE}`);
         } catch (e:any) { log(`❌ Errore salvando UI config: ${e?.message ?? e}`); } 
     };
@@ -93,14 +93,15 @@ export function activate(context: vscode.ExtensionContext) {
         getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
             if (!element) {
                 return Promise.resolve(servers.map(server => {
-                    const item = new vscode.TreeItem(server.name, vscode.TreeItemCollapsibleState.Collapsed);
+                    const item = new vscode.TreeItem(`${server.name}:${server.port}`, vscode.TreeItemCollapsibleState.Collapsed);
+                    (item as any).serverIndex = servers.indexOf(server);
                     item.contextValue = 'serverNode';
                     return item;
                 }));
             }
 
             if (element.contextValue === 'serverNode') {
-                const server = servers.find(s => s.name === element.label);
+                const server = servers[(element as any).serverIndex];
                 if (!server) return Promise.resolve([]);
                 const items: vscode.TreeItem[] = [];
 
@@ -108,7 +109,10 @@ export function activate(context: vscode.ExtensionContext) {
                 startStop.command = { command: 'mokkyBuddyAPIRunner.toggleServer', title: 'Toggle Server', arguments: [server] };
                 items.push(startStop);
 
-                items.push(new vscode.TreeItem(`Port: ${server.port}`));
+                const portItem = new vscode.TreeItem(`Port: ${server.port}`, vscode.TreeItemCollapsibleState.None);
+                portItem.command = { command: 'mokkyBuddyAPIRunner.changePort', title: 'Change Port', arguments: [server] };
+                items.push(portItem);
+
 
                 items.push(new vscode.TreeItem(
                     server.jsonPath ? `Config: file esterno (${path.basename(server.jsonPath)})` : `Config: UI (${server.apiList.length} API)`,
@@ -307,6 +311,33 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.previewJson', async (json:any) => {
             const doc = await vscode.workspace.openTextDocument({content: JSON.stringify(json, null, 2), language:'json'});
             vscode.window.showTextDocument(doc, {preview:true});
+        }),
+
+        vscode.commands.registerCommand('mokkyBuddyAPIRunner.changePort', async (server: ServerDef) => {
+            const input = await vscode.window.showInputBox({
+            prompt: `Inserisci nuova porta per ${server.name}`,
+            value: server.port.toString(),
+            validateInput: (v) => isNaN(Number(v)) ? 'Deve essere un numero' : null
+            });
+            if (!input) return;
+            const newPort = Number(input);
+            const portFree = await checkPort(newPort);
+            if (!portFree) {
+                vscode.window.showErrorMessage(`Porta ${newPort} già in uso`);
+                return;
+            }
+            // Aggiorno solo la porta del server esistente
+            server.port = newPort;
+            // Riavvio server se era in esecuzione
+            if (server.running && server.process) {
+                server.process.kill();
+                server.running = false;
+                await new Promise(r => setTimeout(r, 300));
+                await startServer(server);
+            }
+            +
+            serverProvider.refresh();
+            vscode.window.showInformationMessage(`${server.name} ora usa la porta ${newPort}`);
         })
     );
 }

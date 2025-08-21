@@ -64,8 +64,21 @@
       {
         "command": "mokkyBuddyAPIRunner.loadAPIConfig",
         "title": "Load API Config"
+      },
+      {
+        "command": "mokkybuddy.changePort",
+        "title": "MokkyBuddy: Set Server Port"  
       }
     ],
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "mokkybuddy.changePort",
+          "when": "view == mokkybuddyView && viewItem == server",
+          "group": "inline"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "Mokky Buddy Settings",
@@ -74,11 +87,6 @@
           "type": "string",
           "default": "C:\\\\tools\\\\java\\\\jdk-17.0.15+6\\\\bin\\\\java.exe",
           "description": "Percorso completo dell'eseguibile Java da usare per avviare il server Mokky Buddy."
-        },
-        "mokkyBuddy.serverPort": {
-          "type": "number",
-          "default": 8081,
-          "description": "Porta su cui il server Mokky Buddy sarà eseguito."
         }
       }
     }
