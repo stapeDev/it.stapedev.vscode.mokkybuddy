@@ -21,18 +21,6 @@
 
 ---
 
-## Screenshots
-
-**Server view with APIs and actions**:
-
-![Server View](https://via.placeholder.com/600x200?text=Server+View+Screenshot)
-
-**Adding a new API**:
-
-![Add API](https://via.placeholder.com/600x200?text=Add+API+Screenshot)
-
----
-
 ## Installation
 
 1. Install from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=stapedev.mokky-buddy-api-runner) or using the VSIX.

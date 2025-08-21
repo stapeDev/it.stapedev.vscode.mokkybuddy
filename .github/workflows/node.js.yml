@@ -60,7 +60,7 @@ jobs:
           VERSION=${{ steps.java_version.outputs.version }}
           cp plugin/resources/mokkyBuddyAPI-$VERSION.jar plugin/resources/mokkyBuddyAPI.jar
 
-      # Controlla se la versione è già pubblicata
+      # Controlla se la versione esiste già sul Marketplace
       - name: Check if version exists on Marketplace
         id: version_check
         working-directory: plugin
@@ -68,10 +68,8 @@ jobs:
           VERSION=${{ steps.java_version.outputs.version }}
           EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$VERSION --json || echo "{}")
           if [[ $EXISTS != "{}" ]]; then
-            echo "Version exists"
             echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "Version not published"
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
@@ -94,15 +92,37 @@ jobs:
           jq --arg v "$NEW_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
           mv vss-extension.tmp.json vss-extension.json
 
+      # Aggiorna README, CHANGELOG e FEATURES
+      - name: Update README, CHANGELOG, FEATURES
+        working-directory: plugin
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          # Aggiorna badge versione nel README
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
+          # Crea CHANGELOG se non esiste
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+          fi
+          # Aggiunge nuova voce
+          echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
+          echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
+          # Crea FEATURES.md se non esiste
+          if [ ! -f FEATURES.md ]; then
+            echo "# Features" > FEATURES.md
+            echo "- Start/Stop local mock server" >> FEATURES.md
+            echo "- Add/Edit/Delete API endpoints" >> FEATURES.md
+            echo "- Preview JSON responses" >> FEATURES.md
+          fi
+
       # Commit e push se ci sono modifiche
       - name: Commit and push version bump
         working-directory: plugin
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
+          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar README.md CHANGELOG.md FEATURES.md
           if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version and jar [skip ci]"
+            git commit -m "Update plugin version, jar, README, CHANGELOG, FEATURES [skip ci]"
             git push
           else
             echo "No changes to commit"
