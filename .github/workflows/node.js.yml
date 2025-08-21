@@ -24,6 +24,7 @@ jobs:
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           path: plugin
+        persist-credentials: true
 
       # Checkout della Java App privata (branch main)
       - name: Checkout Java App Repo
