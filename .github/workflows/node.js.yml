@@ -64,10 +64,14 @@ jobs:
       - name: Set plugin version from Java App
         working-directory: plugin
         run: |
+          VERSION=${{ steps.java_version.outputs.version }}
           CURRENT_VERSION=$(jq -r '.version' package.json)
-          echo "Plugin version: $CURRENT_VERSION"
-          if [ "${{ steps.java_version.outputs.version }}" != "$CURRENT_VERSION" ]; then
-            npm version ${{ steps.java_version.outputs.version }} --no-git-tag-version
+          echo "Current package.json version: $CURRENT_VERSION"
+          if [ "$VERSION" != "$CURRENT_VERSION" ]; then
+            npm version $VERSION --no-git-tag-version
+            # Aggiorna anche il vss-extension.json
+            jq --arg v "$VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
           else
             echo "Plugin version already matches Java App"
           fi
@@ -78,13 +82,12 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json resources/mokkyBuddyAPI.jar
+          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version and jar [skip ci]"
             git push
           else
             echo "No changes to commit"
-          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

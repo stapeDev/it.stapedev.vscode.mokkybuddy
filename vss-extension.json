@@ -9,7 +9,7 @@
     },
     "description": "Run and manage mock APIs locally with ease",
     "categories": ["Other"],
-    "icon": "resources/icon.svg",
+    "icon": "resources/logo.png",
     "repository": {
       "type": "git",
       "url": "https://github.com/stapeDev/it.stapedev.vscode.mokkybuddy.git"
