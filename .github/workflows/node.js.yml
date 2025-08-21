@@ -58,7 +58,13 @@ jobs:
       - name: Rename Jar with version
         run: |
           VERSION=${{ steps.java_version.outputs.version }}
-          mv plugin/resources/mokkyBuddyAPI-${VERSION}.jar plugin/resources/mokkyBuddyAPI.jar
+          # Trova il JAR scaricato con versione
+          JAR_FILE=$(ls plugin/resources/mokkyBuddyAPI-*.jar)
+          echo "Found JAR: $JAR_FILE"
+          # Rinomina con versione
+          mv "$JAR_FILE" plugin/resources/mokkyBuddyAPI-${VERSION}.jar
+          # Mantieni anche il nome costante per il plugin
+          cp plugin/resources/mokkyBuddyAPI-${VERSION}.jar plugin/resources/mokkyBuddyAPI.jar
 
       # Aggiorna versione plugin in base alla Java App
       - name: Set plugin version from Java App
@@ -78,7 +84,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json resources/mokkyBuddyAPI.jar
+          git add package.json resources/mokkyBuddyAPI.jar resources/mokkyBuddyAPI-${{ steps.java_version.outputs.version }}.jar || true
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version and jar [skip ci]"
             git push
