@@ -3,9 +3,9 @@ name: Build MokkyBuddy VSCode Plugin
 on:
   push:
     branches:
-      - main        # build anche al push
+      - main
   workflow_run:
-    workflows: ["Mokky Buddy API Build"]  # build quando finisce la Java App
+    workflows: ["Mokky Buddy API Build"]
     types:
       - completed
 
@@ -13,19 +13,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      JAVA_HOME: /usr/lib/jvm/java-17-openjdk
-      MAVEN_OPTS: "-Xmx1024m"
-
     steps:
-      # Checkout del plugin VSCode
+      # Checkout Plugin
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      # Checkout della Java App privata (branch main)
+      # Checkout Java App (necessario per leggere il pom.xml)
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
@@ -34,45 +31,32 @@ jobs:
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
 
-      # Setup Java 17
-      - name: Set up Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: 17
-
       # Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      # Build Java App
-      - name: Build Java App (MokkyBuddy)
-        working-directory: app
-        run: mvn clean package
-
-      # Copia JAR nel plugin
-      - name: Copy JAR to Plugin Resources
-        run: |
-          mkdir -p plugin/resources
-          JAR_FILE=$(ls app/target/*.jar | grep -v "original" | head -n1)
-          cp "$JAR_FILE" plugin/resources/mokkyBuddyAPI.jar
-
-      # Aggiorna automaticamente la versione del plugin
-      - name: Bump plugin version
+      # Aggiorna versione plugin in base al pom.xml della Java App
+      - name: Set plugin version from Java App
         working-directory: plugin
-        run: npm version patch --no-git-tag-version
+        run: |
+          JAVA_VERSION=$(grep -m1 "<version>" ../app/pom.xml | sed -E 's/.*<version>(.*)<\/version>.*/\1/')
+          echo "Java App version: $JAVA_VERSION"
+          npm version $JAVA_VERSION --no-git-tag-version
 
-      # Commit e push della nuova versione
+      # Commit e push solo se ci sono modifiche
       - name: Commit and push version bump
         working-directory: plugin
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add package.json
-          git commit -m "Bump plugin version [skip ci]"
-          git push
+          if ! git diff --cached --quiet; then
+            git commit -m "Bump plugin version to match Java App [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
