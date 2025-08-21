@@ -15,12 +15,15 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:mokkyBuddyAPIRunner.toggleServer",
-    "onCommand:mokkyBuddyAPIRunner.addAPI",
-    "onCommand:mokkyBuddyAPIRunner.deleteAPI",
-    "onCommand:mokkyBuddyAPIRunner.previewJson",
-    "onView:mokkyBuddyServerView"
-  ],
+  "onCommand:mokkyBuddyAPIRunner.toggleServer",
+  "onCommand:mokkyBuddyAPIRunner.addAPI",
+  "onCommand:mokkyBuddyAPIRunner.deleteAPI",
+  "onCommand:mokkyBuddyAPIRunner.previewJson",
+  "onCommand:mokkyBuddyAPIRunner.saveAPIConfig",
+  "onCommand:mokkyBuddyAPIRunner.loadAPIConfig",
+  "onCommand:mokkyBuddyAPIRunner.changePort",
+  "onView:mokkyBuddyServerView"
+],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -66,14 +69,14 @@
         "title": "Load API Config"
       },
       {
-        "command": "mokkybuddy.changePort",
+        "command": "mokkyBuddyAPIRunner.changePort",
         "title": "MokkyBuddy: Set Server Port"
       }
     ],
     "menus": {
       "view/item/context": [
         {
-          "command": "mokkybuddy.changePort",
+          "command": "mokkyBuddyAPIRunner.changePort",
           "when": "view == mokkybuddyView && viewItem == server",
           "group": "inline"
         }

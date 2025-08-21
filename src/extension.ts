@@ -42,14 +42,16 @@ export function activate(context: vscode.ExtensionContext) {
     let apiList: ApiDef[] = [];
 
     try { 
-        if (fs.existsSync(UI_CONFIG_FILE)) {apiList = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8'));}
+        if (fs.existsSync(UI_CONFIG_FILE)) {
+            apiList = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8')) ?? [];
+        }
     } catch {}
 
     servers.push({
         name: 'Localhost',
         port,
         javaPath,
-        apiList,
+        apiList: apiList ?? [],
         running: false
     });
 
@@ -60,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const persistUiConfig = () => { 
         try { 
-            if (fs.existsSync(UI_CONFIG_FILE)) {servers = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8'));}
+            fs.writeFileSync(UI_CONFIG_FILE, JSON.stringify(servers, null, 2), 'utf-8');
             log(`💾 UI config salvata su: ${UI_CONFIG_FILE}`);
         } catch (e:any) { log(`❌ Errore salvando UI config: ${e?.message ?? e}`); } 
     };
@@ -68,7 +70,7 @@ export function activate(context: vscode.ExtensionContext) {
     const writeActiveConfig = (server: ServerDef) => {
         const target = server.jsonPath ?? TEMP_CONFIG;
         try { 
-            fs.writeFileSync(target, JSON.stringify(server.apiList, null, 2), 'utf-8'); 
+            fs.writeFileSync(target, JSON.stringify(server.apiList ?? [], null, 2), 'utf-8'); 
             log(`💾 Config server scritta su: ${target}`); 
         } catch (e: any) { 
             log(`❌ Errore scrittura config: ${e?.message ?? e}`); 
@@ -113,13 +115,13 @@ export function activate(context: vscode.ExtensionContext) {
                 portItem.command = { command: 'mokkyBuddyAPIRunner.changePort', title: 'Change Port', arguments: [server] };
                 items.push(portItem);
 
-
                 items.push(new vscode.TreeItem(
-                    server.jsonPath ? `Config: file esterno (${path.basename(server.jsonPath)})` : `Config: UI (${server.apiList.length} API)`,
+                    `Config: ${server.jsonPath ? `file esterno (${path.basename(server.jsonPath)})` : `UI (${server.apiList?.length ?? 0} API)`}`,
                     vscode.TreeItemCollapsibleState.None
                 ));
 
-                server.apiList.forEach(a => {
+                // API Nodes
+                server.apiList?.forEach(a => {
                     const aNode = new vscode.TreeItem(`[${a.method}] ${a.path}`, vscode.TreeItemCollapsibleState.Collapsed);
                     aNode.contextValue = 'apiNode';
                     aNode.tooltip = `Click to expand details`;
@@ -150,6 +152,7 @@ export function activate(context: vscode.ExtensionContext) {
                     items.push(aNode);
                 });
 
+                // Add/Save/Load
                 const addItem = new vscode.TreeItem('➕ Add API', vscode.TreeItemCollapsibleState.None);
                 addItem.command = { command: 'mokkyBuddyAPIRunner.addAPI', title: 'Add API', arguments: [server] };
                 items.push(addItem);
@@ -192,27 +195,54 @@ export function activate(context: vscode.ExtensionContext) {
             log(`❌ Porta ${server.port} già in uso`); 
             return; 
         }
-
+    
         const jarPath = path.join(context.extensionPath || '', 'resources', 'mokkyBuddyAPI.jar');
-        if (!fs.existsSync(jarPath)) { vscode.window.showErrorMessage(`Jar non trovato: ${jarPath}`); log(`❌ Jar non trovato: ${jarPath}`); return; }
-
+        if (!fs.existsSync(jarPath)) { 
+            vscode.window.showErrorMessage(`Jar non trovato: ${jarPath}`); 
+            log(`❌ Jar non trovato: ${jarPath}`);
+            return; 
+        }
+    
         const configPath = server.jsonPath ?? TEMP_CONFIG;
-        if (!fs.existsSync(configPath)) {writeActiveConfig(server);}
-        if (!fs.existsSync(configPath)) { vscode.window.showErrorMessage(`Config non trovata: ${configPath}`); log(`❌ Config non trovata: ${configPath}`); return; }
-
-        const javaExec = javaPath || 'C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe';
-        if (!fs.existsSync(javaExec)) { vscode.window.showErrorMessage(`Java non trovato: ${javaExec}`); log(`❌ Java non trovato: ${javaExec}`); return; }
-
-        server.process = spawn(javaExec, ['-jar', jarPath, `--it.stapedev.api.mokkybuddy.loader.mock.route.file=file:${configPath}`, `--server.port=${server.port}`]);
-        server.process.stdout?.on('data', d => log(`[stdout] ${d.toString()}`));
-        server.process.stderr?.on('data', d => log(`[stderr] ${d.toString()}`));
+        if (!fs.existsSync(configPath)) { writeActiveConfig(server); }
+        if (!fs.existsSync(configPath)) { 
+            vscode.window.showErrorMessage(`Config non trovata: ${configPath}`); 
+            log(`❌ Config non trovata: ${configPath}`); 
+            return; 
+        }
+    
+        const javaExec = server.javaPath || 'C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe';
+        if (!fs.existsSync(javaExec)) { 
+            vscode.window.showErrorMessage(`Java non trovato: ${javaExec}`); 
+            log(`❌ Java non trovato: ${javaExec}`);
+            return; 
+        }
+    
+        server.process = spawn(javaExec, [
+            '-jar', jarPath, 
+            `--it.stapedev.api.mokkybuddy.loader.mock.route.file=file:${configPath}`, 
+            `--server.port=${server.port}`
+        ]);
+    
+        // ---- Captura stdout ----
+        server.process.stdout?.on('data', (chunk: Buffer) => {
+            const lines = chunk.toString().split(/\r?\n/).filter((l: string) => l.length > 0);
+            lines.forEach((line: string) => log(`[Spring stdout] ${line}`));
+        });
+    
+        // ---- Captura stderr ----
+        server.process.stderr?.on('data', (chunk: Buffer) => {
+            const lines = chunk.toString().split(/\r?\n/).filter((l: string) => l.length > 0);
+            lines.forEach((line: string) => log(`[Spring stderr] ${line}`));
+        });
+    
         server.process.on('exit', code => { 
             log(`⏹ Server ${server.name} exited with code ${code}`); 
             server.process = undefined; 
             server.running = false; 
             serverProvider.refresh(); 
         });
-
+    
         server.running = true;
         serverProvider.refresh();
         vscode.window.showInformationMessage(`Server ${server.name} Started`);
@@ -220,15 +250,15 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const restartServer = async (server: ServerDef) => {
-        log(`🔄 Restarting server ${server.name}...`);
+        writeActiveConfig(server);
         if (server.running && server.process) {
-            server.process.kill();
+            server.process.kill('SIGTERM');
             server.running = false;
-            serverProvider.refresh();
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 300)); // piccolo delay per sicurezza
         }
         await startServer(server);
     };
+    
 
     // ---------------- Commands ----------------
     context.subscriptions.push(
@@ -244,80 +274,11 @@ export function activate(context: vscode.ExtensionContext) {
             await startServer(server);
         }),
 
-        vscode.commands.registerCommand('mokkyBuddyAPIRunner.addAPI', async (server: ServerDef) => {
-            try {
-                const method = await vscode.window.showQuickPick(['GET','POST','PUT','DELETE'], { placeHolder: 'Select HTTP method' }) as HttpMethod | undefined;
-                if (!method) {return;}
-
-                const apiPath = await vscode.window.showInputBox({ prompt: 'API Path (es. /api/user/)', value: '/api/' });
-                if (!apiPath || !apiPath.startsWith('/')) { vscode.window.showErrorMessage('Il path deve iniziare con "/"'); return; }
-
-                const respInput = await vscode.window.showInputBox({ prompt: 'Response JSON (opzionale)', value: '[]' });
-                let responseObj: any = undefined;
-                if (respInput) { try { responseObj = JSON.parse(respInput); } catch { vscode.window.showWarningMessage('JSON di risposta non valido, verrà ignorato'); } }
-
-                server.apiList.push({ method, path: apiPath, response: responseObj });
-                persistUiConfig();
-                writeActiveConfig(server);
-                serverProvider.refresh();
-                await restartServer(server);
-                vscode.window.showInformationMessage(`API [${method}] ${apiPath} aggiunta!`);
-                log(`➕ API aggiunta: [${method}] ${apiPath}`);
-            } catch (e: any) { 
-                vscode.window.showErrorMessage('Errore durante l’aggiunta della API: ' + (e?.message ?? e)); 
-                log(`❌ Errore aggiungendo API: ${e?.message ?? e}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('mokkyBuddyAPIRunner.deleteAPI', async (server: ServerDef, path:string, method:HttpMethod) => {
-            server.apiList = server.apiList.filter(a => !(a.path===path && a.method===method));
-            persistUiConfig();
-            writeActiveConfig(server);
-            serverProvider.refresh();
-            await restartServer(server);
-            log(`🗑 API rimossa: [${method}] ${path}`);
-        }),
-
-        vscode.commands.registerCommand('mokkyBuddyAPIRunner.saveAPIConfig', async (server: ServerDef) => {
-            const fileUri = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(`${server.name}-api-config.json`) });
-            if (!fileUri) {return;}
-            try { 
-                fs.writeFileSync(fileUri.fsPath, JSON.stringify(server.apiList, null, 2), 'utf-8'); 
-                vscode.window.showInformationMessage('Config saved'); 
-                log(`💾 Config salvata manualmente su: ${fileUri.fsPath}`);
-            } catch(e:any) { 
-                vscode.window.showErrorMessage('Errore nel salvare la configurazione'); 
-                log(`❌ Errore salvando config: ${e?.message ?? e}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('mokkyBuddyAPIRunner.loadAPIConfig', async (server: ServerDef) => {
-            const fileUri = await vscode.window.showOpenDialog({ canSelectFiles:true, canSelectMany:false, filters:{'JSON Files':['json']} });
-            if (!fileUri || fileUri.length===0) {return;}
-            try { 
-                const data = JSON.parse(fs.readFileSync(fileUri[0].fsPath,'utf-8')); 
-                server.apiList = data; 
-                persistUiConfig();
-                writeActiveConfig(server);
-                serverProvider.refresh();
-                await restartServer(server);
-                log(`📂 Config caricata da: ${fileUri[0].fsPath}`);
-            } catch(e:any) { 
-                vscode.window.showErrorMessage('Errore nel caricare la configurazione'); 
-                log(`❌ Errore caricando config: ${e?.message ?? e}`);
-            }
-        }),
-
-        vscode.commands.registerCommand('mokkyBuddyAPIRunner.previewJson', async (json:any) => {
-            const doc = await vscode.workspace.openTextDocument({content: JSON.stringify(json, null, 2), language:'json'});
-            vscode.window.showTextDocument(doc, {preview:true});
-        }),
-
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.changePort', async (server: ServerDef) => {
             const input = await vscode.window.showInputBox({
-            prompt: `Inserisci nuova porta per ${server.name}`,
-            value: server.port.toString(),
-            validateInput: (v) => isNaN(Number(v)) ? 'Deve essere un numero' : null
+                prompt: `Inserisci nuova porta per ${server.name}`,
+                value: server.port.toString(),
+                validateInput: (v) => isNaN(Number(v)) ? 'Deve essere un numero' : null
             });
             if (!input) {return;}
             const newPort = Number(input);
@@ -326,18 +287,120 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`Porta ${newPort} già in uso`);
                 return;
             }
-            // Aggiorno solo la porta del server esistente
             server.port = newPort;
-            // Riavvio server se era in esecuzione
             if (server.running && server.process) {
                 server.process.kill();
                 server.running = false;
                 await new Promise(r => setTimeout(r, 300));
                 await startServer(server);
             }
-            +
             serverProvider.refresh();
             vscode.window.showInformationMessage(`${server.name} ora usa la porta ${newPort}`);
+        }),
+
+        // ---------------- API Commands ----------------
+        vscode.commands.registerCommand('mokkyBuddyAPIRunner.addAPI', async (server: ServerDef) => {
+            
+            // Metodo
+            const methodInput = await vscode.window.showQuickPick(
+                ['GET','POST','PUT','DELETE'], 
+                { placeHolder: 'Seleziona il metodo HTTP' }
+            );
+            if (!methodInput) return;
+            
+            // Path
+            const pathInput = await vscode.window.showInputBox({ 
+                prompt: 'Inserisci il path della nuova API (es: /users)' 
+            });
+            if (!pathInput) return;
+        
+            // Risposta Mock
+            const responseInput = await vscode.window.showInputBox({
+                prompt: 'Inserisci la risposta mock (JSON) - lascia vuoto se non serve'
+            });
+            let response: any = undefined;
+            if (responseInput) {
+                try { response = JSON.parse(responseInput); }
+                catch { vscode.window.showErrorMessage('Risposta non è JSON valido, verrà ignorata.'); }
+            }
+        
+            // Expected Body
+            const bodyInput = await vscode.window.showInputBox({
+                prompt: 'Inserisci il body atteso (JSON) - lascia vuoto se non serve'
+            });
+            let expectedBody: any = undefined;
+            if (bodyInput) {
+                try { expectedBody = JSON.parse(bodyInput); }
+                catch { vscode.window.showErrorMessage('Expected body non è JSON valido, verrà ignorato.'); }
+            }
+        
+            // JSON Schema
+            const schemaInput = await vscode.window.showInputBox({
+                prompt: 'Inserisci lo schema JSON per la validazione - lascia vuoto se non serve'
+            });
+            let jsonSchema: any = undefined;
+            if (schemaInput) {
+                try { jsonSchema = JSON.parse(schemaInput); }
+                catch { vscode.window.showErrorMessage('Schema non è JSON valido, verrà ignorato.'); }
+            }
+        
+            // Salvataggio
+            server.apiList.push({ 
+                path: pathInput, 
+                method: methodInput as HttpMethod,
+                response,
+                expectedBody,
+                jsonSchema
+            });
+        
+            serverProvider.refresh();
+            vscode.window.showInformationMessage(`API [${methodInput}] ${pathInput} aggiunta`);
+            await restartServer(server);
+        }),
+
+        vscode.commands.registerCommand('mokkyBuddyAPIRunner.deleteAPI', async (server: ServerDef, path:string, method:HttpMethod) => {
+            server.apiList = server.apiList.filter(a => !(a.path===path && a.method===method));
+            serverProvider.refresh();
+            vscode.window.showInformationMessage(`API [${method}] ${path} rimossa`);
+            await restartServer(server);
+        }),
+
+        vscode.commands.registerCommand('mokkyBuddyAPIRunner.saveAPIConfig', async (server: ServerDef) => {
+            writeActiveConfig(server);
+            persistUiConfig();
+            vscode.window.showInformationMessage(`Config server salvata`);
+        }),
+
+        // 🔥 nuova implementazione: load da file picker
+        vscode.commands.registerCommand('mokkyBuddyAPIRunner.loadAPIConfig', async (server: ServerDef) => {
+            const files = await vscode.window.showOpenDialog({
+                canSelectMany: false,
+                openLabel: 'Carica config JSON',
+                filters: { 'JSON Files': ['json'] }
+            });
+            if (!files || files.length === 0) return;
+
+            const selectedFile = files[0].fsPath;
+            try {
+                const data = JSON.parse(fs.readFileSync(selectedFile, 'utf-8'));
+                if (!Array.isArray(data)) {
+                    vscode.window.showErrorMessage('Il file non contiene una lista valida di API');
+                    return;
+                }
+                server.apiList = data;
+                server.jsonPath = selectedFile;
+                serverProvider.refresh();
+                vscode.window.showInformationMessage(`Config caricata da ${path.basename(selectedFile)}`);
+                log(`📂 Config caricata da ${selectedFile}`);
+                await restartServer(server);
+            } catch (e:any) {
+                vscode.window.showErrorMessage(`Errore caricando il file: ${e?.message ?? e}`);
+            }
+        }),
+
+        vscode.commands.registerCommand('mokkyBuddyAPIRunner.previewJson', async (json:any) => {
+            const doc = await vscode.workspace.openTextDocument({ content: JSON.stringify(json, null, 2), language: 'json' });
+            vscode.window.showTextDocument(doc);
         })
     );
 }
