@@ -26,7 +26,7 @@ jobs:
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
-          repository: stapeDev/it.stapedev.api.mokkybuddy.git
+          repository: stapeDev/it.stapedev.api.mokkybuddy
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
           path: app
