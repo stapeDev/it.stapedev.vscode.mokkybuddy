@@ -25,12 +25,12 @@ jobs:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           path: plugin
 
-      # Checkout della Java App privata (branch mail)
+      # Checkout della Java App privata (branch main)
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
-          ref: mail
+          ref: main
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
 
