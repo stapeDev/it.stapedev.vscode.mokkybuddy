@@ -2,7 +2,7 @@
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally with ease",
-  "version": "1.0.22",
+  "version": "1.0.27",
   "publisher": "Angelo Capasso",
   "repository": {
     "type": "git",
@@ -15,15 +15,15 @@
     "Other"
   ],
   "activationEvents": [
-  "onCommand:mokkyBuddyAPIRunner.toggleServer",
-  "onCommand:mokkyBuddyAPIRunner.addAPI",
-  "onCommand:mokkyBuddyAPIRunner.deleteAPI",
-  "onCommand:mokkyBuddyAPIRunner.previewJson",
-  "onCommand:mokkyBuddyAPIRunner.saveAPIConfig",
-  "onCommand:mokkyBuddyAPIRunner.loadAPIConfig",
-  "onCommand:mokkyBuddyAPIRunner.changePort",
-  "onView:mokkyBuddyServerView"
-],
+    "onCommand:mokkyBuddyAPIRunner.toggleServer",
+    "onCommand:mokkyBuddyAPIRunner.addAPI",
+    "onCommand:mokkyBuddyAPIRunner.deleteAPI",
+    "onCommand:mokkyBuddyAPIRunner.previewJson",
+    "onCommand:mokkyBuddyAPIRunner.saveAPIConfig",
+    "onCommand:mokkyBuddyAPIRunner.loadAPIConfig",
+    "onCommand:mokkyBuddyAPIRunner.changePort",
+    "onView:mokkyBuddyServerView"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
