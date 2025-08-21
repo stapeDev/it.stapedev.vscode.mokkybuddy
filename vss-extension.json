@@ -7,7 +7,7 @@
     "engines": {
       "vscode": "^1.79.0"
     },
-    "description": "Run and manage mock APIs locally with ease",
+    "description": "Run and manage mock APIs locally easly",
     "categories": ["Other"],
     "icon": "resources/logo.png",
     "repository": {
