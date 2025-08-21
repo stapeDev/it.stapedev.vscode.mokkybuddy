@@ -2,7 +2,7 @@ version: 2
 updates:
   # Node.js / NPM dependencies
   - package-ecosystem: "npm"
-    directory: "/"  # percorso del package.json della VS Code extension
+    directory: "../package.json"  # percorso del package.json della VS Code extension
     schedule:
       interval: "weekly"
     commit-message:
@@ -11,11 +11,3 @@ updates:
     ignore:
       - dependency-name: "typescript"
         versions: ["^5.9.2"]  # se vuoi ignorare versioni specifiche
-  # Java / Maven dependencies
-  - package-ecosystem: "maven"
-    directory: "/app"  # percorso del pom.xml della Java app
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "deps"
-    open-pull-requests-limit: 10
