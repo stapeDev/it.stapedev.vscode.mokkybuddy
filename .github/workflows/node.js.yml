@@ -50,7 +50,7 @@ jobs:
           # npx vsce publish # <- Commentata per ora
 
       - name: Upload Plugin Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: mokkybuddy-vscode-plugin
           path: plugin/*.vsix
