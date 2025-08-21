@@ -2,7 +2,7 @@
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally with ease",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "publisher": "Angelo Capasso",
   "repository": {
     "type": "git",
