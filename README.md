@@ -1,6 +1,6 @@
 # Mokky Buddy API Runner
 
-[![Version](https://img.shields.io/badge/version-1.0.30-blue)](https://marketplace.visualstudio.com/items?itemName=stapedev.mokky-buddy-api-runner)
+[![Version](https://img.shields.io/badge/version-1.0.31-blue)](https://marketplace.visualstudio.com/items?itemName=stapedev.mokky-buddy-api-runner)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.70+-purple)](https://code.visualstudio.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
