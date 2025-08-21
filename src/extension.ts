@@ -42,7 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
     let apiList: ApiDef[] = [];
 
     try { 
-        if (fs.existsSync(UI_CONFIG_FILE)) apiList = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8'));
+        if (fs.existsSync(UI_CONFIG_FILE)) {apiList = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8'));}
     } catch {}
 
     servers.push({
@@ -60,7 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const persistUiConfig = () => { 
         try { 
-            if (fs.existsSync(UI_CONFIG_FILE)) servers = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8'));
+            if (fs.existsSync(UI_CONFIG_FILE)) {servers = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8'));}
             log(`💾 UI config salvata su: ${UI_CONFIG_FILE}`);
         } catch (e:any) { log(`❌ Errore salvando UI config: ${e?.message ?? e}`); } 
     };
@@ -85,7 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
         getTreeItem(el: vscode.TreeItem) { return el; }
 
         private preview(json: any) { 
-            if (!json) return '—'; 
+            if (!json) {return '—';} 
             const s = JSON.stringify(json); 
             return s.length > 60 ? s.slice(0, 60) + '…' : s; 
         }
@@ -102,7 +102,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (element.contextValue === 'serverNode') {
                 const server = servers[(element as any).serverIndex];
-                if (!server) return Promise.resolve([]);
+                if (!server) {return Promise.resolve([]);}
                 const items: vscode.TreeItem[] = [];
 
                 const startStop = new vscode.TreeItem(server.running ? `⏹ Stop Server` : `▶ Start Server`, vscode.TreeItemCollapsibleState.None);
@@ -197,7 +197,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!fs.existsSync(jarPath)) { vscode.window.showErrorMessage(`Jar non trovato: ${jarPath}`); log(`❌ Jar non trovato: ${jarPath}`); return; }
 
         const configPath = server.jsonPath ?? TEMP_CONFIG;
-        if (!fs.existsSync(configPath)) writeActiveConfig(server);
+        if (!fs.existsSync(configPath)) {writeActiveConfig(server);}
         if (!fs.existsSync(configPath)) { vscode.window.showErrorMessage(`Config non trovata: ${configPath}`); log(`❌ Config non trovata: ${configPath}`); return; }
 
         const javaExec = javaPath || 'C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe';
@@ -247,7 +247,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.addAPI', async (server: ServerDef) => {
             try {
                 const method = await vscode.window.showQuickPick(['GET','POST','PUT','DELETE'], { placeHolder: 'Select HTTP method' }) as HttpMethod | undefined;
-                if (!method) return;
+                if (!method) {return;}
 
                 const apiPath = await vscode.window.showInputBox({ prompt: 'API Path (es. /api/user/)', value: '/api/' });
                 if (!apiPath || !apiPath.startsWith('/')) { vscode.window.showErrorMessage('Il path deve iniziare con "/"'); return; }
@@ -280,7 +280,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.saveAPIConfig', async (server: ServerDef) => {
             const fileUri = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(`${server.name}-api-config.json`) });
-            if (!fileUri) return;
+            if (!fileUri) {return;}
             try { 
                 fs.writeFileSync(fileUri.fsPath, JSON.stringify(server.apiList, null, 2), 'utf-8'); 
                 vscode.window.showInformationMessage('Config saved'); 
@@ -293,7 +293,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.loadAPIConfig', async (server: ServerDef) => {
             const fileUri = await vscode.window.showOpenDialog({ canSelectFiles:true, canSelectMany:false, filters:{'JSON Files':['json']} });
-            if (!fileUri || fileUri.length===0) return;
+            if (!fileUri || fileUri.length===0) {return;}
             try { 
                 const data = JSON.parse(fs.readFileSync(fileUri[0].fsPath,'utf-8')); 
                 server.apiList = data; 
@@ -319,7 +319,7 @@ export function activate(context: vscode.ExtensionContext) {
             value: server.port.toString(),
             validateInput: (v) => isNaN(Number(v)) ? 'Deve essere un numero' : null
             });
-            if (!input) return;
+            if (!input) {return;}
             const newPort = Number(input);
             const portFree = await checkPort(newPort);
             if (!portFree) {
@@ -343,5 +343,5 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() { 
-    servers.forEach(s => { if(s.process) s.process.kill(); }); 
+    servers.forEach(s => { if(s.process) {s.process.kill();} }); 
 }

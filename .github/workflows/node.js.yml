@@ -25,12 +25,12 @@ jobs:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           path: plugin
 
-      # Checkout della Java App privata (branch main)
+      # Checkout della Java App privata (branch mail)
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
-          ref: main
+          ref: mail
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
 
@@ -41,7 +41,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      # Setup Node.js (per VSCode plugin)
+      # Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
@@ -59,6 +59,23 @@ jobs:
           JAR_FILE=$(ls app/target/*.jar | grep -v "original" | head -n1)
           cp "$JAR_FILE" plugin/resources/mokkyBuddyAPI.jar
 
+      # Aggiorna automaticamente la versione del plugin
+      - name: Bump plugin version
+        working-directory: plugin
+        run: npm version patch --no-git-tag-version
+
+      # Commit e push della nuova versione
+      - name: Commit and push version bump
+        working-directory: plugin
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add package.json
+          git commit -m "Bump plugin version [skip ci]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # Build VSCode Plugin
       - name: Build VSCode Plugin
         working-directory: plugin
@@ -73,7 +90,7 @@ jobs:
           name: mokkybuddy-vscode-plugin
           path: plugin/*.vsix
 
-      # Pubblicazione (opzionale, se vuoi abilitare)
+      # Pubblicazione su Marketplace (opzionale)
       # - name: Publish VSCode Plugin
       #   if: github.ref == 'refs/heads/main'
       #   working-directory: plugin
