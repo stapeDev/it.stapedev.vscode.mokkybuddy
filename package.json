@@ -86,12 +86,12 @@
         "mokkyBuddy.javaPath": {
           "type": "string",
           "default": "C:\\\\tools\\\\java\\\\jdk-17.0.15+6\\\\bin\\\\java.exe",
-          "description": "Percorso completo dell'eseguibile Java da usare per avviare il server Mokky Buddy."
+          "description": "Full path to the Java executable to use for starting the Mokky Buddy server."
         },
         "mokkyBuddy.serverPort": {
           "type": "number",
           "default": 8081,
-          "description": "Porta su cui il server Mokky Buddy sarà eseguito."
+          "description": "Port on which the Mokky Buddy server will run"
         }
       }
     }
