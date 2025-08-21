@@ -3,7 +3,7 @@
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally with ease",
   "version": "1.0.28",
-  "publisher": "Angelo Capasso",
+  "publisher": "StapeDev",
   "repository": {
     "type": "git",
     "url": "https://github.com/stapeDev/it.stapedev.vscode.mokkybuddy.git"
@@ -88,7 +88,7 @@
       "properties": {
         "mokkyBuddy.javaPath": {
           "type": "string",
-          "default": "C:\\\\tools\\\\java\\\\jdk-17.0.15+6\\\\bin\\\\java.exe",
+          "default": "java",
           "description": "Full path to the Java executable to use for starting the Mokky Buddy server."
         },
         "mokkyBuddy.serverPort": {

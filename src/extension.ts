@@ -43,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // ---------------- Default Server ----------------
     const config = vscode.workspace.getConfiguration('mokkyBuddy');
-    const javaPath = config.get<string>('javaPath') ?? 'C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe';
+    const javaPath = config.get<string>('javaPath') ?? 'java';
     const port = config.get<number>('serverPort') ?? 8081;
     let apiList: ApiDef[] = [];
 
@@ -234,7 +234,7 @@ export function activate(context: vscode.ExtensionContext) {
             return; 
         }
     
-        const javaExec = server.javaPath || 'C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe';
+        const javaExec = server.javaPath || 'java';
         if (!fs.existsSync(javaExec)) { 
             vscode.window.showErrorMessage(`Java non trovato: ${javaExec}`); 
             log(`❌ Java non trovato: ${javaExec}`);

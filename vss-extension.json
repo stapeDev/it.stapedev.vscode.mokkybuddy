@@ -1,0 +1,68 @@
+{
+    "manifestVersion": 1,
+    "id": "mokky-buddy-api-runner",
+    "name": "Mokky Buddy API Runner",
+    "publisher": "StapeDev",
+    "version": "1.0.28",
+    "engines": {
+      "vscode": "^1.79.0"
+    },
+    "description": "Run and manage mock APIs locally with ease",
+    "categories": ["Other"],
+    "icon": "resources/icon.svg",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/stapeDev/it.stapedev.vscode.mokkybuddy.git"
+    },
+    "contributes": {
+      "commands": [
+        { "command": "mokkyBuddyAPIRunner.toggleServer", "title": "Start/Stop Mokky Buddy Server" },
+        { "command": "mokkyBuddyAPIRunner.addAPI", "title": "Add API" },
+        { "command": "mokkyBuddyAPIRunner.deleteAPI", "title": "Delete API" },
+        { "command": "mokkyBuddyAPIRunner.previewJson", "title": "Preview JSON" },
+        { "command": "mokkyBuddyAPIRunner.saveAPIConfig", "title": "Save API Config" },
+        { "command": "mokkyBuddyAPIRunner.loadAPIConfig", "title": "Load API Config" },
+        { "command": "mokkyBuddyAPIRunner.changePort", "title": "MokkyBuddy: Set Server Port" }
+      ],
+      "viewsContainers": {
+        "activitybar": [
+          {
+            "id": "mokkyBuddy",
+            "title": "Mokky Buddy",
+            "icon": "resources/icon.svg"
+          }
+        ]
+      },
+      "views": {
+        "mokkyBuddy": [
+          { "id": "mokkyBuddyServerView", "name": "Server" }
+        ]
+      },
+      "menus": {
+        "view/item/context": [
+          {
+            "command": "mokkyBuddyAPIRunner.changePort",
+            "when": "view == mokkybuddyView && viewItem == server",
+            "group": "inline"
+          }
+        ]
+      },
+      "configuration": {
+        "type": "object",
+        "title": "Mokky Buddy Settings",
+        "properties": {
+          "mokkyBuddy.javaPath": {
+            "type": "string",
+            "default": "java",
+            "description": "Full path to the Java executable to use for starting the Mokky Buddy server."
+          },
+          "mokkyBuddy.serverPort": {
+            "type": "number",
+            "default": 8081,
+            "description": "Port on which the Mokky Buddy server will run"
+          }
+        }
+      }
+    }
+  }
+  
