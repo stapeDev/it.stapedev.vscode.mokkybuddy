@@ -7,7 +7,7 @@ on:
   repository_dispatch:
     types: [trigger-plugin-build]
   workflow_run:
-    workflows: ["Mokky Buddy API Build"]
+    workflows: ["Mokky Buddy CI/CD"]
     types:
       - completed
 
@@ -24,7 +24,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      # Checkout Java App (necessario per leggere il pom.xml)
+      # Checkout Java App (necessario per leggere il pom.xml e versione)
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
@@ -39,21 +39,29 @@ jobs:
         with:
           node-version: 20
 
+      # Recupera versione dal POM
+      - name: Get Java App version
+        id: java_version
+        run: |
+          VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "Java App version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # Download Jar artifact della Java App
+      - name: Download Jar Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mokkybuddy-jar
+          path: plugin/resources
+
       # Aggiorna versione plugin in base alla Java App
       - name: Set plugin version from Java App
         working-directory: plugin
         run: |
-          # Recupera la versione del progetto Java
-          JAVA_VERSION=$(mvn -f ../app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "Java App version: $JAVA_VERSION"
-
-          # Versione attuale del plugin
           CURRENT_VERSION=$(jq -r '.version' package.json)
           echo "Plugin version: $CURRENT_VERSION"
-
-          # Aggiorna solo se necessario
-          if [ "$JAVA_VERSION" != "$CURRENT_VERSION" ]; then
-            npm version $JAVA_VERSION --no-git-tag-version
+          if [ "${{ steps.java_version.outputs.version }}" != "$CURRENT_VERSION" ]; then
+            npm version ${{ steps.java_version.outputs.version }} --no-git-tag-version
           else
             echo "Plugin version already matches Java App"
           fi
@@ -64,16 +72,15 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json
+          git add package.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
-            git commit -m "Bump plugin version to match Java App [skip ci]"
+            git commit -m "Update plugin version and jar [skip ci]"
             git push
           else
             echo "No changes to commit"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 
       # Build VSCode Plugin
       - name: Build VSCode Plugin
