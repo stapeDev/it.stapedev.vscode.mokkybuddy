@@ -44,14 +44,14 @@ jobs:
         id: java_version
         run: |
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "Java App version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # Download Jar artifact della Java App
-      - name: Download Jar Artifact
+      - name: Download Jar Artifact from Java App repo
         uses: actions/download-artifact@v4
         with:
-          name: mokkybuddy-jar
+          repository: stapeDev/it.stapedev.api.mokkybuddy
+          name: mokkyBuddyAPI-${{ steps.java_version.outputs.version }}
           path: plugin/resources
 
       # Rinomina il JAR scaricato per riflettere la versione e mantenere nome costante
