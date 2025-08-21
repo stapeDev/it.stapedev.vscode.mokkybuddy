@@ -78,7 +78,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json resources/mokkyBuddyAPI.jar resources/mokkyBuddyAPI-${{ steps.java_version.outputs.version }}.jar || true
+          git add package.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version and jar [skip ci]"
             git push
