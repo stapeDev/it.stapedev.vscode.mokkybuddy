@@ -15,42 +15,65 @@ jobs:
       MAVEN_OPTS: "-Xmx1024m"
 
     steps:
+      # Checkout del plugin VSCode
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           path: plugin
 
+      # Checkout della Java App privata (branch main)
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
           path: app
 
+      # Setup Java 17
       - name: Set up Java
         uses: actions/setup-java@v3
         with:
           distribution: temurin
           java-version: 17
 
+      # Setup Node.js (per VSCode plugin)
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      # Build Java App
       - name: Build Java App (MokkyBuddy)
         working-directory: app
         run: mvn clean package
 
+      # Copia JAR nel plugin
       - name: Copy JAR to Plugin Resources
         run: |
           mkdir -p plugin/resources
-          cp app/target/mokkyBuddyAPI.jar plugin/resources/
+          JAR_FILE=$(ls app/target/*.jar | grep -v "original" | head -n1)
+          cp "$JAR_FILE" plugin/resources/mokkyBuddyAPI.jar
 
+      # Build VSCode Plugin
       - name: Build VSCode Plugin
         working-directory: plugin
         run: |
           npm install
           npx vsce package
-          # npx vsce publish # <- Commentata per ora
 
+      # Upload artifact
       - name: Upload Plugin Artifact
         uses: actions/upload-artifact@v4
         with:
           name: mokkybuddy-vscode-plugin
           path: plugin/*.vsix
+
+      # Pubblicazione (opzionale, se vuoi abilitare)
+      # - name: Publish VSCode Plugin
+      #   if: github.ref == 'refs/heads/main'
+      #   working-directory: plugin
+      #   run: npx vsce publish
+      #   env:
+      #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
