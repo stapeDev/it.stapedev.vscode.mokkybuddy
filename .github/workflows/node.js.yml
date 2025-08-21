@@ -46,25 +46,19 @@ jobs:
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # Download Jar artifact della Java App
-      - name: Download Jar Artifact from Java App repo
-        uses: actions/download-artifact@v4
-        with:
-          repository: stapeDev/it.stapedev.api.mokkybuddy
-          name: mokkyBuddyAPI-${{ steps.java_version.outputs.version }}
-          path: plugin/resources
-
-      # Rinomina il JAR scaricato per riflettere la versione e mantenere nome costante
-      - name: Rename Jar with version
+      # Download JAR from Java App Release
+      - name: Download JAR from Java App Release
         run: |
           VERSION=${{ steps.java_version.outputs.version }}
-          # Trova il JAR scaricato con versione
-          JAR_FILE=$(ls plugin/resources/mokkyBuddyAPI-*.jar)
-          echo "Found JAR: $JAR_FILE"
-          # Rinomina con versione
-          mv "$JAR_FILE" plugin/resources/mokkyBuddyAPI-${VERSION}.jar
-          # Mantieni anche il nome costante per il plugin
-          cp plugin/resources/mokkyBuddyAPI-${VERSION}.jar plugin/resources/mokkyBuddyAPI.jar
+          echo "Downloading MokkyBuddyAPI-$VERSION.jar from release"
+          curl -L -o plugin/resources/mokkyBuddyAPI-$VERSION.jar \
+            https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
+
+      # Mantieni anche il nome costante per il plugin
+      - name: Copy Jar to fixed name
+        run: |
+          VERSION=${{ steps.java_version.outputs.version }}
+          cp plugin/resources/mokkyBuddyAPI-$VERSION.jar plugin/resources/mokkyBuddyAPI.jar
 
       # Aggiorna versione plugin in base alla Java App
       - name: Set plugin version from Java App
