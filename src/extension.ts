@@ -27,6 +27,12 @@ interface ServerDef {
 let servers: ServerDef[] = [];
 
 export function activate(context: vscode.ExtensionContext) {
+
+    const log = (msg: string) => { 
+        output.appendLine(msg); 
+        console.log(msg); 
+    };
+    
     const output = vscode.window.createOutputChannel('Mokky Buddy API Runner');
 
     // ---------------- Paths ----------------
@@ -43,9 +49,13 @@ export function activate(context: vscode.ExtensionContext) {
 
     try { 
         if (fs.existsSync(UI_CONFIG_FILE)) {
-            apiList = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8')) ?? [];
+            const rawList = JSON.parse(fs.readFileSync(UI_CONFIG_FILE, 'utf-8')) ?? [];
+            // Filtro solo le API valide (con path e method)
+            apiList = rawList.filter((a: any) => a.path && a.method);
         }
-    } catch {}
+    } catch (e) {
+        log(`❌ Errore caricando UI config: ${e}`);
+    }
 
     servers.push({
         name: 'Localhost',
@@ -54,11 +64,6 @@ export function activate(context: vscode.ExtensionContext) {
         apiList: apiList ?? [],
         running: false
     });
-
-    const log = (msg: string) => { 
-        output.appendLine(msg); 
-        console.log(msg); 
-    };
 
     const persistUiConfig = () => { 
         try { 
@@ -92,48 +97,56 @@ export function activate(context: vscode.ExtensionContext) {
     
         refresh() { this._onDidChangeTreeData.fire(null); }
         getTreeItem(el: vscode.TreeItem) { return el; }
-
+    
         private preview(json: any) { 
-            if (!json) {return '—';} 
-            const s = JSON.stringify(json); 
-            return s.length > 60 ? s.slice(0, 60) + '…' : s; 
+            if (!json) return '—'; 
+            const s = JSON.stringify(json);
+            return s.length > 60 ? s.slice(0, 60) + '…' : s;
         }
-
+    
         getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
             if (!element) {
-                return Promise.resolve(servers.map(server => {
+                return Promise.resolve(servers.map((server, index) => {
                     const item = new vscode.TreeItem(`${server.name}:${server.port}`, vscode.TreeItemCollapsibleState.Collapsed);
-                    (item as any).serverIndex = servers.indexOf(server);
+                    (item as any).serverIndex = index;
                     item.contextValue = 'serverNode';
                     return item;
                 }));
             }
-
+    
             if (element.contextValue === 'serverNode') {
                 const server = servers[(element as any).serverIndex];
-                if (!server) {return Promise.resolve([]);}
+                if (!server) return Promise.resolve([]);
+    
                 const items: vscode.TreeItem[] = [];
-
+    
+                // Start/Stop
                 const startStop = new vscode.TreeItem(server.running ? `⏹ Stop Server` : `▶ Start Server`, vscode.TreeItemCollapsibleState.None);
                 startStop.command = { command: 'mokkyBuddyAPIRunner.toggleServer', title: 'Toggle Server', arguments: [server] };
                 items.push(startStop);
-
+    
+                // Porta
                 const portItem = new vscode.TreeItem(`Port: ${server.port}`, vscode.TreeItemCollapsibleState.None);
                 portItem.command = { command: 'mokkyBuddyAPIRunner.changePort', title: 'Change Port', arguments: [server] };
                 items.push(portItem);
-
+    
+                // Config info
                 items.push(new vscode.TreeItem(
                     `Config: ${server.jsonPath ? `file esterno (${path.basename(server.jsonPath)})` : `UI (${server.apiList?.length ?? 0} API)`}`,
                     vscode.TreeItemCollapsibleState.None
                 ));
-
+    
                 // API Nodes
-                server.apiList?.forEach(a => {
-                    const aNode = new vscode.TreeItem(`[${a.method}] ${a.path}`, vscode.TreeItemCollapsibleState.Collapsed);
+                server.apiList?.filter(a => a.path && a.method).forEach(a => {
+                    const aNode = new vscode.TreeItem(
+                        `[${a.method ?? 'NO_METHOD'}] ${a.path ?? 'NO_PATH'}`,
+                        vscode.TreeItemCollapsibleState.Collapsed
+                    );
                     aNode.contextValue = 'apiNode';
                     aNode.tooltip = `Click to expand details`;
-
+    
                     const children: vscode.TreeItem[] = [];
+    
                     if (a.response !== undefined) {
                         const rNode = new vscode.TreeItem(`Response: ${this.preview(a.response)}`, vscode.TreeItemCollapsibleState.None);
                         rNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.response] };
@@ -149,36 +162,36 @@ export function activate(context: vscode.ExtensionContext) {
                         sNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.jsonSchema] };
                         children.push(sNode);
                     }
-
+    
                     const delNode = new vscode.TreeItem(`🗑 Delete API`, vscode.TreeItemCollapsibleState.None);
                     delNode.command = { command: 'mokkyBuddyAPIRunner.deleteAPI', title: 'Delete API', arguments: [server, a.path, a.method] };
                     children.push(delNode);
-
+    
                     aNode.collapsibleState = children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
                     (aNode as any).children = children;
                     items.push(aNode);
                 });
-
+    
                 // Add/Save/Load
                 const addItem = new vscode.TreeItem('➕ Add API', vscode.TreeItemCollapsibleState.None);
                 addItem.command = { command: 'mokkyBuddyAPIRunner.addAPI', title: 'Add API', arguments: [server] };
                 items.push(addItem);
-
+    
                 const saveItem = new vscode.TreeItem('💾 Save Config', vscode.TreeItemCollapsibleState.None);
                 saveItem.command = { command: 'mokkyBuddyAPIRunner.saveAPIConfig', title: 'Save API Config', arguments: [server] };
                 items.push(saveItem);
-
+    
                 const loadItem = new vscode.TreeItem('📂 Load Config', vscode.TreeItemCollapsibleState.None);
                 loadItem.command = { command: 'mokkyBuddyAPIRunner.loadAPIConfig', title: 'Load API Config', arguments: [server] };
                 items.push(loadItem);
-
+    
                 return Promise.resolve(items);
             }
-
+    
             if (element.contextValue === 'apiNode') {
                 return Promise.resolve((element as any).children ?? []);
             }
-
+    
             return Promise.resolve([]);
         }
     }
