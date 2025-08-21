@@ -62,7 +62,14 @@ export function activate(context: vscode.ExtensionContext) {
 
     const persistUiConfig = () => { 
         try { 
-            fs.writeFileSync(UI_CONFIG_FILE, JSON.stringify(servers, null, 2), 'utf-8');
+            // salva solo i server che non hanno file esterno
+            const uiServers = servers.map(s => ({
+                name: s.name,
+                port: s.port,
+                javaPath: s.javaPath,
+                apiList: s.jsonPath ? [] : s.apiList  // se ha file esterno, non salvare apiList
+            }));
+            fs.writeFileSync(UI_CONFIG_FILE, JSON.stringify(uiServers, null, 2), 'utf-8');
             log(`💾 UI config salvata su: ${UI_CONFIG_FILE}`);
         } catch (e:any) { log(`❌ Errore salvando UI config: ${e?.message ?? e}`); } 
     };
@@ -250,12 +257,23 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const restartServer = async (server: ServerDef) => {
-        writeActiveConfig(server);
-        if (server.running && server.process) {
-            server.process.kill('SIGTERM');
-            server.running = false;
-            await new Promise(r => setTimeout(r, 300)); // piccolo delay per sicurezza
+        // Riavvia il server solo se era già attivo
+        if (!server.running || !server.process) return;
+    
+        // Salva la configurazione solo se il server è in esecuzione
+        const configPath = server.jsonPath ?? TEMP_CONFIG;
+        try {
+            fs.writeFileSync(configPath, JSON.stringify(server.apiList ?? [], null, 2), 'utf-8');
+            log(`💾 Config server scritta su: ${configPath}`);
+        } catch (e: any) {
+            log(`❌ Errore scrittura config: ${e?.message ?? e}`);
+            vscode.window.showErrorMessage('Errore nel salvare la configurazione attiva.');
         }
+    
+        server.process.kill('SIGTERM');
+        server.running = false;
+        await new Promise(r => setTimeout(r, 300));
+    
         await startServer(server);
     };
     
@@ -379,7 +397,7 @@ export function activate(context: vscode.ExtensionContext) {
                 filters: { 'JSON Files': ['json'] }
             });
             if (!files || files.length === 0) return;
-
+        
             const selectedFile = files[0].fsPath;
             try {
                 const data = JSON.parse(fs.readFileSync(selectedFile, 'utf-8'));
@@ -387,16 +405,23 @@ export function activate(context: vscode.ExtensionContext) {
                     vscode.window.showErrorMessage('Il file non contiene una lista valida di API');
                     return;
                 }
+        
+                // Aggiorna solo in memoria senza sovrascrivere il file
                 server.apiList = data;
                 server.jsonPath = selectedFile;
                 serverProvider.refresh();
                 vscode.window.showInformationMessage(`Config caricata da ${path.basename(selectedFile)}`);
                 log(`📂 Config caricata da ${selectedFile}`);
-                await restartServer(server);
-            } catch (e:any) {
+        
+                // Riavvia solo se il server era attivo
+                if (server.running && server.process) {
+                    await restartServer(server);
+                }
+        
+            } catch (e: any) {
                 vscode.window.showErrorMessage(`Errore caricando il file: ${e?.message ?? e}`);
             }
-        }),
+        }), 
 
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.previewJson', async (json:any) => {
             const doc = await vscode.workspace.openTextDocument({ content: JSON.stringify(json, null, 2), language: 'json' });
