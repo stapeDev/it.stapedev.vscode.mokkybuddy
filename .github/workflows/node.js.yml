@@ -3,8 +3,11 @@ name: Build MokkyBuddy VSCode Plugin
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+      - main        # build anche al push
+  workflow_run:
+    workflows: ["Mokky Buddy API Build"]  # build quando finisce la Java App
+    types:
+      - completed
 
 jobs:
   build:
