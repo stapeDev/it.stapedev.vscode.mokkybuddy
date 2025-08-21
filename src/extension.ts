@@ -32,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
         output.appendLine(msg); 
         console.log(msg); 
     };
-    
+
     const output = vscode.window.createOutputChannel('Mokky Buddy API Runner');
 
     // ---------------- Paths ----------------
@@ -92,109 +92,112 @@ export function activate(context: vscode.ExtensionContext) {
 
     // ---------------- Tree Provider ----------------
     class ServerTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-        private _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | null>();
-        readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-    
-        refresh() { this._onDidChangeTreeData.fire(null); }
-        getTreeItem(el: vscode.TreeItem) { return el; }
-    
-        private preview(json: any) { 
-            if (!json) return '—'; 
-            const s = JSON.stringify(json);
-            return s.length > 60 ? s.slice(0, 60) + '…' : s;
-        }
-    
-        getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
-            if (!element) {
-                return Promise.resolve(servers.map((server, index) => {
-                    const item = new vscode.TreeItem(`${server.name}:${server.port}`, vscode.TreeItemCollapsibleState.Collapsed);
-                    (item as any).serverIndex = index;
-                    item.contextValue = 'serverNode';
-                    return item;
-                }));
-            }
-    
-            if (element.contextValue === 'serverNode') {
-                const server = servers[(element as any).serverIndex];
-                if (!server) return Promise.resolve([]);
-    
-                const items: vscode.TreeItem[] = [];
-    
-                // Start/Stop
-                const startStop = new vscode.TreeItem(server.running ? `⏹ Stop Server` : `▶ Start Server`, vscode.TreeItemCollapsibleState.None);
-                startStop.command = { command: 'mokkyBuddyAPIRunner.toggleServer', title: 'Toggle Server', arguments: [server] };
-                items.push(startStop);
-    
-                // Porta
-                const portItem = new vscode.TreeItem(`Port: ${server.port}`, vscode.TreeItemCollapsibleState.None);
-                portItem.command = { command: 'mokkyBuddyAPIRunner.changePort', title: 'Change Port', arguments: [server] };
-                items.push(portItem);
-    
-                // Config info
-                items.push(new vscode.TreeItem(
-                    `Config: ${server.jsonPath ? `file esterno (${path.basename(server.jsonPath)})` : `UI (${server.apiList?.length ?? 0} API)`}`,
-                    vscode.TreeItemCollapsibleState.None
-                ));
-    
-                // API Nodes
-                server.apiList?.filter(a => a.path && a.method).forEach(a => {
-                    const aNode = new vscode.TreeItem(
-                        `[${a.method ?? 'NO_METHOD'}] ${a.path ?? 'NO_PATH'}`,
-                        vscode.TreeItemCollapsibleState.Collapsed
-                    );
-                    aNode.contextValue = 'apiNode';
-                    aNode.tooltip = `Click to expand details`;
-    
-                    const children: vscode.TreeItem[] = [];
-    
-                    if (a.response !== undefined) {
-                        const rNode = new vscode.TreeItem(`Response: ${this.preview(a.response)}`, vscode.TreeItemCollapsibleState.None);
-                        rNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.response] };
-                        children.push(rNode);
-                    }
-                    if (a.expectedBody !== undefined) {
-                        const bNode = new vscode.TreeItem(`Expected Body: ${this.preview(a.expectedBody)}`, vscode.TreeItemCollapsibleState.None);
-                        bNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.expectedBody] };
-                        children.push(bNode);
-                    }
-                    if (a.jsonSchema !== undefined) {
-                        const sNode = new vscode.TreeItem(`JSON Schema: ${this.preview(a.jsonSchema)}`, vscode.TreeItemCollapsibleState.None);
-                        sNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.jsonSchema] };
-                        children.push(sNode);
-                    }
-    
-                    const delNode = new vscode.TreeItem(`🗑 Delete API`, vscode.TreeItemCollapsibleState.None);
-                    delNode.command = { command: 'mokkyBuddyAPIRunner.deleteAPI', title: 'Delete API', arguments: [server, a.path, a.method] };
-                    children.push(delNode);
-    
-                    aNode.collapsibleState = children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
-                    (aNode as any).children = children;
-                    items.push(aNode);
-                });
-    
-                // Add/Save/Load
-                const addItem = new vscode.TreeItem('➕ Add API', vscode.TreeItemCollapsibleState.None);
-                addItem.command = { command: 'mokkyBuddyAPIRunner.addAPI', title: 'Add API', arguments: [server] };
-                items.push(addItem);
-    
-                const saveItem = new vscode.TreeItem('💾 Save Config', vscode.TreeItemCollapsibleState.None);
-                saveItem.command = { command: 'mokkyBuddyAPIRunner.saveAPIConfig', title: 'Save API Config', arguments: [server] };
-                items.push(saveItem);
-    
-                const loadItem = new vscode.TreeItem('📂 Load Config', vscode.TreeItemCollapsibleState.None);
-                loadItem.command = { command: 'mokkyBuddyAPIRunner.loadAPIConfig', title: 'Load API Config', arguments: [server] };
-                items.push(loadItem);
-    
-                return Promise.resolve(items);
-            }
-    
-            if (element.contextValue === 'apiNode') {
-                return Promise.resolve((element as any).children ?? []);
-            }
-    
-            return Promise.resolve([]);
-        }
+    private _onDidChangeTreeData = new vscode.EventEmitter<vscode.TreeItem | null>();
+    readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+
+    refresh() { this._onDidChangeTreeData.fire(null); }
+
+    private preview(json: any) { 
+        if (!json) {return '—';} 
+        const s = JSON.stringify(json);
+        return s.length > 60 ? s.slice(0, 60) + '…' : s;
     }
+
+    getTreeItem(el: vscode.TreeItem) { return el; }
+
+    getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
+        if (!element) {
+            // Root nodes: server list
+            return Promise.resolve(servers.map((server, index) => {
+                const apiCount = server.apiList?.filter(a => a.path && a.method).length ?? 0;
+                const label = `${server.name}:${server.port} (${apiCount} API)`;
+                const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Collapsed);
+                (item as any).serverIndex = index;
+                item.contextValue = 'serverNode';
+                return item;
+            }));
+        }
+
+        if (element.contextValue === 'serverNode') {
+            const server = servers[(element as any).serverIndex];
+            if (!server) {return Promise.resolve([]);}
+
+            const items: vscode.TreeItem[] = [];
+
+            // Start/Stop
+            const startStop = new vscode.TreeItem(server.running ? `⏹ Stop Server` : `▶ Start Server`, vscode.TreeItemCollapsibleState.None);
+            startStop.command = { command: 'mokkyBuddyAPIRunner.toggleServer', title: 'Toggle Server', arguments: [server] };
+            items.push(startStop);
+
+            // Porta
+            const portItem = new vscode.TreeItem(`Port: ${server.port}`, vscode.TreeItemCollapsibleState.None);
+            portItem.command = { command: 'mokkyBuddyAPIRunner.changePort', title: 'Change Port', arguments: [server] };
+            items.push(portItem);
+
+            // Config info
+            const apiCount = server.apiList?.filter(a => a.path && a.method).length ?? 0;
+            const configLabel = `Config: ${server.jsonPath ? `file esterno (${path.basename(server.jsonPath)})` : `UI (${apiCount} API)`}`;
+            items.push(new vscode.TreeItem(configLabel, vscode.TreeItemCollapsibleState.None));
+
+            // API Nodes
+            server.apiList?.filter(a => a.path && a.method).forEach(a => {
+                const pathText = a.path || 'NO_PATH';
+                const methodText = a.method || 'NO_METHOD';
+                const aNode = new vscode.TreeItem(`[${methodText}] ${pathText}`, vscode.TreeItemCollapsibleState.Collapsed);
+                aNode.contextValue = 'apiNode';
+                aNode.tooltip = `API ${methodText} ${pathText}`;
+
+                const children: vscode.TreeItem[] = [];
+
+                if (a.response !== undefined) {
+                    const rNode = new vscode.TreeItem(`Response: ${this.preview(a.response)}`, vscode.TreeItemCollapsibleState.None);
+                    rNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.response] };
+                    children.push(rNode);
+                }
+                if (a.expectedBody !== undefined) {
+                    const bNode = new vscode.TreeItem(`Expected Body: ${this.preview(a.expectedBody)}`, vscode.TreeItemCollapsibleState.None);
+                    bNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.expectedBody] };
+                    children.push(bNode);
+                }
+                if (a.jsonSchema !== undefined) {
+                    const sNode = new vscode.TreeItem(`JSON Schema: ${this.preview(a.jsonSchema)}`, vscode.TreeItemCollapsibleState.None);
+                    sNode.command = { command: 'mokkyBuddyAPIRunner.previewJson', title: 'Preview', arguments: [a.jsonSchema] };
+                    children.push(sNode);
+                }
+
+                const delNode = new vscode.TreeItem(`🗑 Delete API`, vscode.TreeItemCollapsibleState.None);
+                delNode.command = { command: 'mokkyBuddyAPIRunner.deleteAPI', title: 'Delete API', arguments: [server, a.path, a.method] };
+                children.push(delNode);
+
+                (aNode as any).children = children;
+                aNode.collapsibleState = children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None;
+                items.push(aNode);
+            });
+
+            // Add/Save/Load
+            const addItem = new vscode.TreeItem('➕ Add API', vscode.TreeItemCollapsibleState.None);
+            addItem.command = { command: 'mokkyBuddyAPIRunner.addAPI', title: 'Add API', arguments: [server] };
+            items.push(addItem);
+
+            const saveItem = new vscode.TreeItem('💾 Save Config', vscode.TreeItemCollapsibleState.None);
+            saveItem.command = { command: 'mokkyBuddyAPIRunner.saveAPIConfig', title: 'Save API Config', arguments: [server] };
+            items.push(saveItem);
+
+            const loadItem = new vscode.TreeItem('📂 Load Config', vscode.TreeItemCollapsibleState.None);
+            loadItem.command = { command: 'mokkyBuddyAPIRunner.loadAPIConfig', title: 'Load API Config', arguments: [server] };
+            items.push(loadItem);
+
+            return Promise.resolve(items);
+        }
+
+        if (element.contextValue === 'apiNode') {
+            return Promise.resolve((element as any).children ?? []);
+        }
+
+        return Promise.resolve([]);
+    }
+}
+
 
     const serverProvider = new ServerTreeProvider();
     context.subscriptions.push(vscode.window.registerTreeDataProvider('mokkyBuddyServerView', serverProvider));
@@ -270,7 +273,7 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const restartServer = async (server: ServerDef) => {
-        if (!server.running || !server.process) return;
+        if (!server.running || !server.process) {return;}
     
         // Salva solo se il server NON usa file esterno
         if (!server.jsonPath) {
@@ -345,13 +348,13 @@ export function activate(context: vscode.ExtensionContext) {
                 ['GET','POST','PUT','DELETE'], 
                 { placeHolder: 'Seleziona il metodo HTTP' }
             );
-            if (!methodInput) return;
+            if (!methodInput) {return;}
             
             // Path
             const pathInput = await vscode.window.showInputBox({ 
                 prompt: 'Inserisci il path della nuova API (es: /users)' 
             });
-            if (!pathInput) return;
+            if (!pathInput) {return;}
         
             // Risposta Mock
             const responseInput = await vscode.window.showInputBox({
@@ -417,7 +420,7 @@ export function activate(context: vscode.ExtensionContext) {
                 openLabel: 'Carica config JSON',
                 filters: { 'JSON Files': ['json'] }
             });
-            if (!files || files.length === 0) return;
+            if (!files || files.length === 0) {return;}
         
             const selectedFile = files[0].fsPath;
             try {
