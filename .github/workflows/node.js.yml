@@ -28,7 +28,7 @@ jobs:
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
           ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.JAVA_APP_PAT }}
           path: app
 
       # Setup Java 17
