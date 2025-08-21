@@ -24,7 +24,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      # Checkout Java App (per leggere il pom.xml e versione)
+      # Checkout Java App
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
@@ -46,7 +46,7 @@ jobs:
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # Download JAR from Java App Release
+      # Download JAR dalla release della Java App
       - name: Download JAR from Java App Release
         run: |
           VERSION=${{ steps.java_version.outputs.version }}
@@ -54,29 +54,47 @@ jobs:
           curl -L -o plugin/resources/mokkyBuddyAPI-$VERSION.jar \
             https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
 
-      # Mantieni anche il nome costante per il plugin
+      # Copia JAR con nome fisso
       - name: Copy Jar to fixed name
         run: |
           VERSION=${{ steps.java_version.outputs.version }}
           cp plugin/resources/mokkyBuddyAPI-$VERSION.jar plugin/resources/mokkyBuddyAPI.jar
 
-      # Aggiorna versione plugin in base alla Java App
-      - name: Set plugin version from Java App
+      # Controlla se la versione è già pubblicata
+      - name: Check if version exists on Marketplace
+        id: version_check
         working-directory: plugin
         run: |
           VERSION=${{ steps.java_version.outputs.version }}
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          echo "Current package.json version: $CURRENT_VERSION"
-          if [ "$VERSION" != "$CURRENT_VERSION" ]; then
-            npm version $VERSION --no-git-tag-version
-            # Aggiorna anche il vss-extension.json
-            jq --arg v "$VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
-            mv vss-extension.tmp.json vss-extension.json
+          EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$VERSION --json || echo "{}")
+          if [[ $EXISTS != "{}" ]]; then
+            echo "Version exists"
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "Plugin version already matches Java App"
+            echo "Version not published"
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      # Commit e push solo se ci sono modifiche
+      # Imposta versione plugin e aggiorna vss-extension.json
+      - name: Set plugin version
+        working-directory: plugin
+        run: |
+          JAVA_VERSION=${{ steps.java_version.outputs.version }}
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          echo "Current package.json version: $CURRENT_VERSION"
+          if [ "${{ steps.version_check.outputs.exists }}" == "true" ]; then
+            echo "Version already exists, incrementing patch"
+            NEW_VERSION=$(npm version patch --no-git-tag-version)
+          else
+            echo "Using Java App version $JAVA_VERSION"
+            npm version $JAVA_VERSION --no-git-tag-version
+            NEW_VERSION=$JAVA_VERSION
+          fi
+          # Aggiorna anche vss-extension.json
+          jq --arg v "$NEW_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+          mv vss-extension.tmp.json vss-extension.json
+
+      # Commit e push se ci sono modifiche
       - name: Commit and push version bump
         working-directory: plugin
         run: |
@@ -106,7 +124,7 @@ jobs:
           name: mokkybuddy-vscode-plugin
           path: plugin/*.vsix
 
-      # Pubblicazione su Marketplace (opzionale)
+      # Publish su Marketplace
       - name: Publish VSCode Plugin
         if: github.ref == 'refs/heads/main'
         working-directory: plugin
