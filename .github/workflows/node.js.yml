@@ -93,9 +93,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      - name: Reset working directory
+      - name: Reset working directory and sync with remote
         working-directory: plugin
-        run: git reset --hard origin/main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
 
       - name: Download updated plugin directory
         uses: actions/download-artifact@v4
@@ -140,7 +142,7 @@ jobs:
           git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version and JAR [skip ci]"
-            git push origin main
+            git push origin main --force-with-lease
           else
             echo "No changes to commit"
           fi
@@ -164,9 +166,11 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      - name: Reset working directory
+      - name: Reset working directory and sync with remote
         working-directory: plugin
-        run: git reset --hard origin/main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
 
       - name: Download plugin directory
         uses: actions/download-artifact@v4
@@ -200,13 +204,14 @@ jobs:
             echo "- Preview JSON responses" >> FEATURES.md
           fi
 
+          # Config Git e commit
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add README.md CHANGELOG.md FEATURES.md
 
           if ! git diff --cached --quiet; then
             git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
-            git push origin main
+            git push origin main --force-with-lease
           else
             echo "No changes to commit"
           fi
