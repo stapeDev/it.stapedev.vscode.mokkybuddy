@@ -47,7 +47,7 @@ jobs:
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # Upload directory plugin + resources per i job successivi
+      # Upload plugin directory
       - name: Upload plugin directory
         uses: actions/upload-artifact@v4
         with:
@@ -91,11 +91,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare-jar
     steps:
+      # Checkout repo per poter fare commit
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
+
       - name: Download updated plugin directory
         uses: actions/download-artifact@v4
         with:
           name: plugin-files-updated
-          path: plugin
+          path: tmp_plugin
+
+      - name: Copy files into checked-out repo
+        run: cp -R tmp_plugin/* plugin/
 
       - name: Check if version exists on Marketplace
         id: version_check
@@ -138,7 +149,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload updated plugin directory
+      - name: Upload plugin directory
         uses: actions/upload-artifact@v4
         with:
           name: plugin-files-updated-version
@@ -148,11 +159,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: update-version
     steps:
+      # Checkout repo per commit
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
+
       - name: Download plugin directory
         uses: actions/download-artifact@v4
         with:
           name: plugin-files-updated-version
-          path: plugin
+          path: tmp_plugin
+
+      - name: Copy files into checked-out repo
+        run: cp -R tmp_plugin/* plugin/
 
       - name: Update README, CHANGELOG, FEATURES
         working-directory: plugin
