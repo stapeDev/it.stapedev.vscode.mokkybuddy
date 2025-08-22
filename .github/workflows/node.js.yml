@@ -12,9 +12,10 @@ on:
       - completed
 
 jobs:
-  build:
+  checkout:
     runs-on: ubuntu-latest
-
+    outputs:
+      java_version: ${{ steps.get_java_version.outputs.version }}
     steps:
       # Checkout Plugin
       - name: Checkout Plugin Repo
@@ -41,31 +42,66 @@ jobs:
 
       # Recupera versione dal POM
       - name: Get Java App version
-        id: java_version
+        id: get_java_version
         run: |
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # Download JAR dalla release della Java App
+      # Upload directory plugin + resources per i job successivi
+      - name: Upload plugin directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-files
+          path: plugin
+
+  prepare-jar:
+    runs-on: ubuntu-latest
+    needs: checkout
+    outputs:
+      jar_file: ${{ steps.set_fixed_name.outputs.jar_file }}
+    steps:
+      - name: Download plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-files
+          path: plugin
+
       - name: Download JAR from Java App Release
+        id: download_jar
         run: |
-          VERSION=${{ steps.java_version.outputs.version }}
-          echo "Downloading MokkyBuddyAPI-$VERSION.jar from release"
+          VERSION=${{ needs.checkout.outputs.java_version }}
+          echo "Downloading MokkyBuddyAPI-$VERSION.jar"
           curl -L -o plugin/resources/mokkyBuddyAPI-$VERSION.jar \
             https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
 
-      # Copia JAR con nome fisso
       - name: Copy Jar to fixed name
+        id: set_fixed_name
         run: |
-          VERSION=${{ steps.java_version.outputs.version }}
+          VERSION=${{ needs.checkout.outputs.java_version }}
           cp plugin/resources/mokkyBuddyAPI-$VERSION.jar plugin/resources/mokkyBuddyAPI.jar
+          echo "jar_file=plugin/resources/mokkyBuddyAPI.jar" >> $GITHUB_OUTPUT
 
-      # Controlla se la versione esiste già sul Marketplace
+      - name: Upload updated plugin directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-files-updated
+          path: plugin
+
+  update-version:
+    runs-on: ubuntu-latest
+    needs: prepare-jar
+    steps:
+      - name: Download updated plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-files-updated
+          path: plugin
+
       - name: Check if version exists on Marketplace
         id: version_check
         working-directory: plugin
         run: |
-          VERSION=${{ steps.java_version.outputs.version }}
+          VERSION=${{ needs.checkout.outputs.java_version }}
           EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$VERSION --json || echo "{}")
           if [[ $EXISTS != "{}" ]]; then
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -73,56 +109,28 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      # Imposta versione plugin e aggiorna vss-extension.json
       - name: Set plugin version
         working-directory: plugin
         run: |
-          JAVA_VERSION=${{ steps.java_version.outputs.version }}
+          JAVA_VERSION=${{ needs.checkout.outputs.java_version }}
           CURRENT_VERSION=$(jq -r '.version' package.json)
-          echo "Current package.json version: $CURRENT_VERSION"
           if [ "${{ steps.version_check.outputs.exists }}" == "true" ]; then
-            echo "Version already exists, incrementing patch"
             NEW_VERSION=$(npm version patch --no-git-tag-version)
           else
-            echo "Using Java App version $JAVA_VERSION"
             npm version $JAVA_VERSION --no-git-tag-version
             NEW_VERSION=$JAVA_VERSION
           fi
-          # Aggiorna anche vss-extension.json
           jq --arg v "$NEW_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
           mv vss-extension.tmp.json vss-extension.json
 
-      # Aggiorna README, CHANGELOG e FEATURES
-      - name: Update README, CHANGELOG, FEATURES
-        working-directory: plugin
-        run: |
-          VERSION=$(jq -r '.version' package.json)
-          # Aggiorna badge versione nel README
-          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
-          # Crea CHANGELOG se non esiste
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-          fi
-          # Aggiunge nuova voce
-          echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
-          echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
-          # Crea FEATURES.md se non esiste
-          if [ ! -f FEATURES.md ]; then
-            echo "# Features" > FEATURES.md
-            echo "- Start/Stop local mock server" >> FEATURES.md
-            echo "- Add/Edit/Delete API endpoints" >> FEATURES.md
-            echo "- Preview JSON responses" >> FEATURES.md
-          fi
-
-      # Commit e push se ci sono modifiche
-      - name: Commit and push version bump
+      - name: Commit version bump
         working-directory: plugin
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar README.md CHANGELOG.md FEATURES.md
+          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version, jar, README, CHANGELOG, FEATURES [skip ci]"
+            git commit -m "Update plugin version and JAR [skip ci]"
             git push
           else
             echo "No changes to commit"
@@ -130,23 +138,88 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build VSCode Plugin
+      - name: Upload updated plugin directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-files-updated-version
+          path: plugin
+
+  update-docs:
+    runs-on: ubuntu-latest
+    needs: update-version
+    steps:
+      - name: Download plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-files-updated-version
+          path: plugin
+
+      - name: Update README, CHANGELOG, FEATURES
+        working-directory: plugin
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
+          if [ ! -f CHANGELOG.md ]; then echo "# Changelog" > CHANGELOG.md; fi
+          echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
+          echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
+          if [ ! -f FEATURES.md ]; then
+            echo "# Features" > FEATURES.md
+            echo "- Start/Stop local mock server" >> FEATURES.md
+            echo "- Add/Edit/Delete API endpoints" >> FEATURES.md
+            echo "- Preview JSON responses" >> FEATURES.md
+          fi
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add README.md CHANGELOG.md FEATURES.md
+          if ! git diff --cached --quiet; then
+            git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload plugin directory after docs update
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin
+
+  build-plugin:
+    runs-on: ubuntu-latest
+    needs: update-docs
+    steps:
+      - name: Download final plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin
+
       - name: Build VSCode Plugin
         working-directory: plugin
         run: |
           npm install
           npx vsce package
 
-      # Upload artifact
       - name: Upload Plugin Artifact
         uses: actions/upload-artifact@v4
         with:
           name: mokkybuddy-vscode-plugin
           path: plugin/*.vsix
 
-      # Publish su Marketplace
+  publish:
+    runs-on: ubuntu-latest
+    needs: build-plugin
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Download final plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin
+
       - name: Publish VSCode Plugin
-        if: github.ref == 'refs/heads/main'
         working-directory: plugin
         run: npx vsce publish
         env:
