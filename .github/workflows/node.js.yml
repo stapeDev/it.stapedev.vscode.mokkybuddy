@@ -17,7 +17,6 @@ jobs:
     outputs:
       java_version: ${{ steps.get_java_version.outputs.version }}
     steps:
-      # Checkout Plugin
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
@@ -25,7 +24,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      # Checkout Java App
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
@@ -34,20 +32,17 @@ jobs:
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
 
-      # Setup Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      # Recupera versione dal POM
       - name: Get Java App version
         id: get_java_version
         run: |
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # Upload plugin directory
       - name: Upload plugin directory
         uses: actions/upload-artifact@v4
         with:
@@ -91,13 +86,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare-jar
     steps:
-      # Checkout repo per poter fare commit
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
+
+      - name: Reset working directory
+        working-directory: plugin
+        run: git reset --hard
 
       - name: Download updated plugin directory
         uses: actions/download-artifact@v4
@@ -141,10 +139,8 @@ jobs:
           git config user.email "github-actions@github.com"
           git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
-            # Integra eventuali commit remoti prima del push
             git fetch origin main
             git rebase origin/main || git rebase --abort
-
             git commit -m "Update plugin version and JAR [skip ci]"
             git push origin main --force-with-lease
           else
@@ -163,13 +159,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: update-version
     steps:
-      # Checkout repo per commit
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
+
+      - name: Reset working directory
+        working-directory: plugin
+        run: git reset --hard
 
       - name: Download plugin directory
         uses: actions/download-artifact@v4
@@ -184,35 +183,22 @@ jobs:
         working-directory: plugin
         run: |
           VERSION=$(jq -r '.version' package.json)
-
-          # Aggiorna badge versione nel README
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
-
-          # Crea CHANGELOG se non esiste
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-          fi
+          if [ ! -f CHANGELOG.md ]; then echo "# Changelog" > CHANGELOG.md; fi
           echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
           echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
-
-          # Crea FEATURES.md se non esiste
           if [ ! -f FEATURES.md ]; then
             echo "# Features" > FEATURES.md
             echo "- Start/Stop local mock server" >> FEATURES.md
             echo "- Add/Edit/Delete API endpoints" >> FEATURES.md
             echo "- Preview JSON responses" >> FEATURES.md
           fi
-
-          # Config Git
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add README.md CHANGELOG.md FEATURES.md
-
           if ! git diff --cached --quiet; then
-            # Integra eventuali commit remoti prima del push
             git fetch origin main
             git rebase origin/main || git rebase --abort
-
             git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
             git push origin main --force-with-lease
           else
@@ -226,7 +212,6 @@ jobs:
         with:
           name: plugin-final
           path: plugin
-
 
   build-plugin:
     runs-on: ubuntu-latest
