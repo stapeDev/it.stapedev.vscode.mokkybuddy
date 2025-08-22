@@ -247,23 +247,23 @@ jobs:
           path: plugin/*.vsix
 
   publish:
-  runs-on: ubuntu-latest
-  needs: build-plugin
-  if: github.ref == 'refs/heads/main'
-  steps:
-    - name: Download final plugin directory
-      uses: actions/download-artifact@v4
-      with:
-        name: plugin-final
-        path: plugin
+    runs-on: ubuntu-latest
+    needs: build-plugin
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Download final plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin
 
-    - name: Install TypeScript types
-      working-directory: plugin
-      run: npm install --save-dev @types/node @types/mocha
+      - name: Install TypeScript types
+        working-directory: plugin
+        run: npm install --save-dev @types/node @types/mocha
 
-    - name: Publish VSCode Plugin
-      working-directory: plugin
-      run: npx @vscode/vsce publish
-      env:
-        VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      - name: Publish VSCode Plugin
+        working-directory: plugin
+        run: npx @vscode/vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
