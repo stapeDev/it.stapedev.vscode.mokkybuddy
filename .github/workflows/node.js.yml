@@ -199,7 +199,6 @@ jobs:
             echo "- Preview JSON responses" >> FEATURES.md
           fi
 
-          # Config Git e commit
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add README.md CHANGELOG.md FEATURES.md
@@ -212,11 +211,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload plugin directory after docs update
-      uses: actions/upload-artifact@v4
-      with:
-        name: plugin-final
-        path: plugin
+      - name: Upload plugin directory after docs update
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin
 
   build-plugin:
     runs-on: ubuntu-latest
