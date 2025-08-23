@@ -1,0 +1,49 @@
+name: Build & Test MokkyBuddy VSCode Plugin (Dependabot)
+
+on:
+  pull_request:
+    branches: ["main"]
+    # Questo trigger fa partire la workflow solo sulle PR verso main, incluse quelle di Dependabot
+
+jobs:
+  build-plugin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
+
+      - name: Checkout Java App Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.api.mokkybuddy
+          ref: main
+          token: ${{ secrets.JAVA_APP_PAT }}
+          path: app
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Get Java App version
+        id: get_java_version
+        run: |
+          VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download JAR from Java App Release
+        run: |
+          VERSION=${{ steps.get_java_version.outputs.version }}
+          curl -L -o plugin/resources/mokkyBuddyAPI.jar \
+            https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
+
+      - name: Build VSCode Plugin
+        working-directory: plugin
+        run: |
+          npm install
+          npx vsce package
