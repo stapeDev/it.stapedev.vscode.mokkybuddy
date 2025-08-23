@@ -64,7 +64,8 @@ jobs:
       - name: Set release version
         id: set_release_version
         run: |
-          VERSION_WITHOUT_SNAPSHOT=${{ needs.checkout.outputs.java_version//-SNAPSHOT/}}
+          VERSION_WITHOUT_SNAPSHOT="${{ needs.checkout.outputs.java_version }}"
+          VERSION_WITHOUT_SNAPSHOT=${VERSION_WITHOUT_SNAPSHOT/-SNAPSHOT/}
           echo "release_version=$VERSION_WITHOUT_SNAPSHOT" >> $GITHUB_OUTPUT
 
       - name: Download JAR artifact from CI/CD
