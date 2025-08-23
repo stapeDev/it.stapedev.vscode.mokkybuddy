@@ -212,13 +212,17 @@ jobs:
 
           # --- Generazione CHANGELOG.md e FEATURES.md dalla repo Java ---
           cd ../app
-          # ottieni tutti i commit in ordine cronologico
-          RANGE=$(git rev-list --reverse HEAD)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="$LAST_TAG..HEAD"
+          fi
 
-          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)")
-          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)")
-          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)")
-          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)")
+          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
+          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
+          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse)
+          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse)
 
           cd ../plugin
 
@@ -239,21 +243,22 @@ jobs:
             echo "# Features" > FEATURES.md
           fi
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          echo "$FEATS" >> FEATURES.md
+          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
 
-          # Commit su main con pull sicuro
+          # Commit su main
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add README.md CHANGELOG.md FEATURES.md
+          git add -A
           if ! git diff --cached --quiet; then
-            git pull --rebase --autostash origin main
             git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
-            git push origin main
+            git pull --rebase origin main
+            git push origin main --force-with-lease
           else
             echo "No changes to commit"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   build-plugin:
     runs-on: ubuntu-latest
