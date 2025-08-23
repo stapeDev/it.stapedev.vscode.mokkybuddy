@@ -3,7 +3,7 @@
   "id": "mokky-buddy-api-runner",
   "name": "Mokky Buddy API Runner",
   "publisher": "StapeDev",
-  "version": "v1.0.58",
+  "version": "v1.0.59",
   "engines": {
     "vscode": "^1.79.0"
   },
