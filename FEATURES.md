@@ -7,3 +7,4 @@
 - Tree view UI to browse servers and APIs
 - Quick action icons next to server name (Add, Load, Save)
 - Change server port via command
+## Version 1.0.67 (2025-08-23)
