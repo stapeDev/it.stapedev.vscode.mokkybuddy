@@ -32,3 +32,5 @@
 - Updated plugin to match Java App version 1.0.49
 ## 1.0.50 - 2025-08-23
 - Updated plugin to match Java App version 1.0.50
+## 1.0.51 - 2025-08-23
+- Updated plugin to match Java App version 1.0.51
