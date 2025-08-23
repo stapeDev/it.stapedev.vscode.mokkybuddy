@@ -212,23 +212,19 @@ jobs:
 
           # --- Generazione CHANGELOG.md e FEATURES.md dalla repo Java ---
           cd ../app
-
-          # Determina il range dei commit
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$LAST_TAG" ]; then
-            RANGE="$LAST_TAG..HEAD"
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD~100..HEAD"
           else
-            RANGE=$(git rev-list --max-parents=0 HEAD)..HEAD
+            RANGE="$LAST_TAG..HEAD"
           fi
 
-          # Recupera i commit ordinati cronologicamente
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
           FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
           CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse)
           BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse)
 
           cd ../plugin
-
           # CHANGELOG.md
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
@@ -246,20 +242,23 @@ jobs:
             echo "# Features" > FEATURES.md
           fi
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
+          echo "$FEATS" >> FEATURES.md
 
-          # Commit su main
+          # Commit su main con rebase automatico
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add README.md CHANGELOG.md FEATURES.md
           if ! git diff --cached --quiet; then
             git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
+            git fetch origin main
+            git rebase origin/main
             git push origin main --force-with-lease
           else
             echo "No changes to commit"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   build-plugin:
     runs-on: ubuntu-latest
