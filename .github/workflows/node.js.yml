@@ -64,7 +64,7 @@ jobs:
       - name: Download JAR artifact from CI/CD
         uses: actions/download-artifact@v4
         with:
-          name: mokkyBuddyAPI
+          name: mokkyBuddyAPI-${{ needs.checkout.outputs.java_version }}
           path: plugin/resources
 
       - name: Copy Jar to fixed name
