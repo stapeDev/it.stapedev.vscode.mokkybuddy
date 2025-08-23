@@ -22,7 +22,7 @@ jobs:
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
           ref: main
-          token: ${{ secrets.JAVA_APP_PAT }}
+          token: ${{ secrets.JAVA_APP_PATH_DEPENDANT_BOT }}
           path: app
 
       - name: Set up Node.js
