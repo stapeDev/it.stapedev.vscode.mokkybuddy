@@ -18,7 +18,9 @@
   "files": [
     "dist",
     "resources/mokkyBuddyAPI.jar",
-    "vss-extension.json"
+    "resources/logo.png",
+    "vss-extension.json",
+    "LICENSE"
   ],
   "activationEvents": [
     "onCommand:mokkyBuddyAPIRunner.toggleServer",
