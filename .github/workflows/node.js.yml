@@ -61,17 +61,17 @@ jobs:
           name: plugin-files
           path: plugin
       
-      - name: Set release version
-        id: set_release_version
+      - name: Set Java version without SNAPSHOT
+        id: java_version_clean
         run: |
-          VERSION_WITHOUT_SNAPSHOT="${{ needs.checkout.outputs.java_version }}"
-          VERSION_WITHOUT_SNAPSHOT=${VERSION_WITHOUT_SNAPSHOT/-SNAPSHOT/}
-          echo "release_version=$VERSION_WITHOUT_SNAPSHOT" >> $GITHUB_OUTPUT
+          JAVA_VER="${{ needs.checkout.outputs.java_version }}"
+          JAVA_VER_CLEAN=${JAVA_VER/-SNAPSHOT/}
+          echo "java_version_clean=$JAVA_VER_CLEAN" >> $GITHUB_OUTPUT
 
       - name: Download JAR artifact from CI/CD
         uses: actions/download-artifact@v4
         with:
-          name: mokkyBuddyAPI-${{ steps.set_release_version.outputs.release_version }}
+          name: mokkyBuddyAPI-${{ steps.java_version_clean.outputs.java_version_clean }}
           path: plugin/resources
 
       - name: Copy Jar to fixed name
