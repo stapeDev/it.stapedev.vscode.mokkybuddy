@@ -2,7 +2,7 @@
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally easly",
-  "version": "1.0.51",
+  "version": "1.0.52",
   "publisher": "StapeDev",
   "icon": "resources/logo.png",
   "repository": {
