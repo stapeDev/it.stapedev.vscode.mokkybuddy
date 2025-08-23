@@ -174,69 +174,88 @@ jobs:
           name: plugin-files-updated-version
           path: plugin
 
-  update-docs:
-    runs-on: ubuntu-latest
-    needs: update-version
-    steps:
-      - name: Checkout Plugin Repo
-        uses: actions/checkout@v3
-        with:
-          repository: stapeDev/it.stapedev.vscode.mokkybuddy
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: plugin
+    update-docs:
+      runs-on: ubuntu-latest
+      needs: update-version
+      steps:
+        - name: Checkout Plugin Repo
+          uses: actions/checkout@v3
+          with:
+            repository: stapeDev/it.stapedev.vscode.mokkybuddy
+            token: ${{ secrets.GITHUB_TOKEN }}
+            path: plugin
 
-      - name: Reset working directory and sync with remote
-        working-directory: plugin
-        run: |
-          git fetch origin main
-          git reset --hard origin/main
+        - name: Checkout Java App Repo for changelog
+          uses: actions/checkout@v3
+          with:
+            repository: stapeDev/it.stapedev.api.mokkybuddy
+            ref: main
+            token: ${{ secrets.JAVA_APP_PAT }}
+            path: app
 
-      - name: Download plugin directory
-        uses: actions/download-artifact@v4
-        with:
-          name: plugin-files-updated-version
-          path: tmp_plugin
+        - name: Download plugin directory
+          uses: actions/download-artifact@v4
+          with:
+            name: plugin-files-updated-version
+            path: tmp_plugin
 
-      - name: Copy files into checked-out repo
-        run: cp -R tmp_plugin/* plugin/
+        - name: Copy files into checked-out repo
+          run: cp -R tmp_plugin/* plugin/
 
-      - name: Update README, CHANGELOG, FEATURES
-        working-directory: plugin
-        run: |
-          VERSION=$(jq -r '.version' package.json)
+        - name: Update README, CHANGELOG, FEATURES dynamically
+          working-directory: plugin
+          run: |
+            VERSION=$(jq -r '.version' package.json)
 
-          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
+            # Aggiorna badge versione nel README
+            sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
 
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-          fi
-          echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
-          echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
+            # --- Generazione CHANGELOG.md e FEATURES.md dalla repo Java ---
+            cd ../app
+            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -z "$LAST_TAG" ]; then
+              RANGE="HEAD~20..HEAD"
+            else
+              RANGE="$LAST_TAG..HEAD"
+            fi
 
-          if [ ! -f FEATURES.md ]; then
-            echo "# Features" > FEATURES.md
-            echo "- Start/Stop local mock server" >> FEATURES.md
-            echo "- Add/Edit/Delete API endpoints" >> FEATURES.md
-            echo "- Preview JSON responses" >> FEATURES.md
-          fi
+            FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)")
+            FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)")
+            CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)")
+            BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)")
 
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add README.md CHANGELOG.md FEATURES.md
-          if ! git diff --cached --quiet; then
-            git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
-            git push origin main --force-with-lease
-          else
-            echo "No changes to commit"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            cd ../plugin
+            # CHANGELOG.md
+            if [ ! -f CHANGELOG.md ]; then
+              echo "# Changelog" > CHANGELOG.md
+            fi
+            CHANGELOG_TMP=$(mktemp)
+            echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> $CHANGELOG_TMP
+            [ -n "$FEATS" ] && echo -e "\n### Features" >> $CHANGELOG_TMP && echo "$FEATS" >> $CHANGELOG_TMP
+            [ -n "$FIXES" ] && echo -e "\n### Fixes" >> $CHANGELOG_TMP && echo "$FIXES" >> $CHANGELOG_TMP
+            [ -n "$CHORES" ] && echo -e "\n### Chores" >> $CHANGELOG_TMP && echo "$CHORES" >> $CHANGELOG_TMP
+            [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES" >> $CHANGELOG_TMP && echo "$BREAKING" >> $CHANGELOG_TMP
+            cat $CHANGELOG_TMP CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
 
-      - name: Upload plugin directory after docs update
-        uses: actions/upload-artifact@v4
-        with:
-          name: plugin-final
-          path: plugin
+            # FEATURES.md
+            if [ ! -f FEATURES.md ]; then
+              echo "# Features" > FEATURES.md
+            fi
+            echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
+            echo "$FEATS" >> FEATURES.md
+
+            # Commit su main
+            git config user.name "github-actions"
+            git config user.email "github-actions@github.com"
+            git add README.md CHANGELOG.md FEATURES.md
+            if ! git diff --cached --quiet; then
+              git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
+              git push origin main --force-with-lease
+            else
+              echo "No changes to commit"
+            fi
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-plugin:
     runs-on: ubuntu-latest
