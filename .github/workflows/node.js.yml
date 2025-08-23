@@ -192,8 +192,6 @@ jobs:
           ref: main
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
-          fetch-depth: 0
-          tags: true
 
       - name: Download plugin directory
         uses: actions/download-artifact@v4
@@ -214,7 +212,7 @@ jobs:
 
           # --- Generazione CHANGELOG.md e FEATURES.md dalla repo Java ---
           cd ../app
-          # Prende tutti i commit in ordine cronologico
+          # ottieni tutti i commit in ordine cronologico
           RANGE=$(git rev-list --reverse HEAD)
 
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)")
@@ -223,6 +221,7 @@ jobs:
           BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)")
 
           cd ../plugin
+
           # CHANGELOG.md
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
@@ -233,22 +232,21 @@ jobs:
           [ -n "$FIXES" ] && echo -e "\n### Fixes" >> $CHANGELOG_TMP && echo "$FIXES" >> $CHANGELOG_TMP
           [ -n "$CHORES" ] && echo -e "\n### Chores" >> $CHANGELOG_TMP && echo "$CHORES" >> $CHANGELOG_TMP
           [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES" >> $CHANGELOG_TMP && echo "$BREAKING" >> $CHANGELOG_TMP
-          cat CHANGELOG.md >> CHANGELOG_TMP
-          mv $CHANGELOG_TMP CHANGELOG.md
+          cat $CHANGELOG_TMP CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
 
           # FEATURES.md
           if [ ! -f FEATURES.md ]; then
             echo "# Features" > FEATURES.md
           fi
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
+          echo "$FEATS" >> FEATURES.md
 
-          # Commit su main con pull --rebase per evitare conflitti
+          # Commit su main con pull sicuro
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add README.md CHANGELOG.md FEATURES.md
           if ! git diff --cached --quiet; then
-            git pull --rebase origin main
+            git pull --rebase --autostash origin main
             git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
             git push origin main
           else
@@ -256,8 +254,6 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
 
   build-plugin:
     runs-on: ubuntu-latest
