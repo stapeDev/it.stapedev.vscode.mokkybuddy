@@ -23,7 +23,6 @@ jobs:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
-          fetch-depth: 0   # necessario per git log completo
 
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
@@ -92,7 +91,6 @@ jobs:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
-          fetch-depth: 0  # assicura tutta la cronologia
 
       - name: Reset working directory
         working-directory: plugin
@@ -113,19 +111,21 @@ jobs:
         id: version_bump
         working-directory: plugin
         run: |
-          # Usa il commit del push corrente dal payload GitHub
-          LAST_COMMIT="${{ github.event.head_commit.message }}"
+          # Usa commit più recente se presente, altrimenti fallback a default
+          LAST_COMMIT=$(git log -1 --pretty=%B 2>/dev/null || echo "")
+          echo "Last commit message: $LAST_COMMIT"
+
           CURRENT_VERSION=$(jq -r '.version' package.json)
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 
           NEW_BRANCH=""
 
-          if [[ "$LAST_COMMIT" == *"BREAKING CHANGE"* ]]; then
+          if [[ "$LAST_COMMIT" == *"[major]"* || "$LAST_COMMIT" == *"BREAKING CHANGE"* ]]; then
             MAJOR=$((MAJOR+1))
             MINOR=0
             PATCH=0
             NEW_BRANCH="versions/${MAJOR}.${MINOR}.X"
-          elif [[ "$LAST_COMMIT" == feat:* ]]; then
+          elif [[ "$LAST_COMMIT" == *"[minor]"* || "$LAST_COMMIT" == feat:* ]]; then
             MINOR=$((MINOR+1))
             PATCH=0
             NEW_BRANCH="versions/${MAJOR}.${MINOR}.X"
@@ -134,8 +134,9 @@ jobs:
             NEW_BRANCH="versions/${MAJOR}.${MINOR}.X"
           fi
 
-          # Controlla se la versione esiste già e aumenta il patch se necessario
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+
+          # Incrementa patch se versione già pubblicata
           while npx vsce show StapeDev.mokky-buddy-api-runner@$NEW_VERSION --json >/dev/null 2>&1; do
             PATCH=$((PATCH+1))
             NEW_VERSION="$MAJOR.$MINOR.$PATCH"
@@ -144,7 +145,6 @@ jobs:
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "branch=$NEW_BRANCH" >> $GITHUB_OUTPUT
 
-          # Aggiorna file
           jq --arg v "$NEW_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
           mv vss-extension.tmp.json vss-extension.json
           echo $NEW_VERSION > VERSION
@@ -157,6 +157,11 @@ jobs:
           git add package.json vss-extension.json VERSION resources/mokkyBuddyAPI.jar
           git commit -m "Update plugin version to ${{ steps.version_bump.outputs.new_version }} [skip ci]" || echo "No changes to commit"
           git push origin main --force-with-lease
+
+          # Crea tag git su main
+          NEW_VERSION=${{ steps.version_bump.outputs.new_version }}
+          git tag -f v$NEW_VERSION
+          git push origin v$NEW_VERSION --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -167,6 +172,11 @@ jobs:
           git fetch origin
           git checkout -B ${{ steps.version_bump.outputs.branch }} main
           git push origin ${{ steps.version_bump.outputs.branch }} --force
+
+          # Crea tag git anche sul branch di release
+          NEW_VERSION=${{ steps.version_bump.outputs.new_version }}
+          git tag -f v$NEW_VERSION
+          git push origin v$NEW_VERSION --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -176,14 +186,75 @@ jobs:
           name: plugin-versioned
           path: plugin
 
-  build-plugin:
+  update-docs:
     runs-on: ubuntu-latest
     needs: bump-version
+    steps:
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
+
+      - name: Reset working directory
+        working-directory: plugin
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Download plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-versioned
+          path: tmp_plugin
+
+      - name: Copy files into checked-out repo
+        run: cp -R tmp_plugin/* plugin/
+
+      - name: Update README, CHANGELOG, FEATURES
+        working-directory: plugin
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
+
+          if [ ! -f CHANGELOG.md ]; then echo "# Changelog" > CHANGELOG.md; fi
+          echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
+          echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
+
+          if [ ! -f FEATURES.md ]; then
+            echo "# Features" > FEATURES.md
+            echo "- Start/Stop local mock server" >> FEATURES.md
+            echo "- Add/Edit/Delete API endpoints" >> FEATURES.md
+            echo "- Preview JSON responses" >> FEATURES.md
+          fi
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add README.md CHANGELOG.md FEATURES.md
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
+            git push origin main --force-with-lease
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload plugin directory after docs update
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin
+
+  build-plugin:
+    runs-on: ubuntu-latest
+    needs: update-docs
     steps:
       - name: Download final plugin directory
         uses: actions/download-artifact@v4
         with:
-          name: plugin-files-updated
+          name: plugin-final
           path: plugin
 
       - name: Build VSCode Plugin
@@ -206,7 +277,7 @@ jobs:
       - name: Download final plugin directory
         uses: actions/download-artifact@v4
         with:
-          name: plugin-files-updated
+          name: plugin-final
           path: plugin
 
       - name: Install TypeScript types
