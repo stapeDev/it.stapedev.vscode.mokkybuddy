@@ -1,11 +1,10 @@
-# Ignora cartelle di sviluppo
-node_modules/
-.vscode/
-tests/
-out/test/
+node_modules
+.vscode
+tmp_plugin
 *.log
-
-# Ignora file locali
-.env
-.DS_Store
-*.md
+.git
+.gitignore
+README.md
+CHANGELOG.md
+FEATURES.md
+np

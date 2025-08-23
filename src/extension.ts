@@ -206,7 +206,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // ---------------- Server Utilities ----------------
     const checkPort = async (port: number):Promise<boolean> => {
-        if (process.env.NODE_ENV === 'test') return true;
+        if (process.env.NODE_ENV === 'test') {return true;}
         return new Promise(resolve => {
             const server = net.createServer();
             server.once('error', () => resolve(false));

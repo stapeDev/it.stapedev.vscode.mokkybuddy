@@ -15,6 +15,11 @@
   "categories": [
     "Other"
   ],
+  "files": [
+    "dist",
+    "resources/mokkyBuddyAPI.jar",
+    "vss-extension.json"
+  ],
   "activationEvents": [
     "onCommand:mokkyBuddyAPIRunner.toggleServer",
     "onCommand:mokkyBuddyAPIRunner.addAPI",
