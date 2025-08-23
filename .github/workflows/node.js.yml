@@ -223,32 +223,32 @@ jobs:
           path: plugin
 
   build-plugin:
-  runs-on: ubuntu-latest
-  needs: update-docs
-  steps:
-    - name: Download final plugin directory
-      uses: actions/download-artifact@v4
-      with:
-        name: plugin-final
-        path: plugin
+    runs-on: ubuntu-latest
+    needs: update-docs
+    steps:
+      - name: Download final plugin directory
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin
 
-    - name: Install dependencies
-      working-directory: plugin
-      run: npm install
+      - name: Install dependencies
+        working-directory: plugin
+        run: npm install
 
-    - name: Run tests
-      working-directory: plugin
-      run: npm test
+      - name: Run tests
+        working-directory: plugin
+        run: npm test
 
-    - name: Build VSCode Plugin
-      working-directory: plugin
-      run: npx vsce package
+      - name: Build VSCode Plugin
+        working-directory: plugin
+        run: npx vsce package
 
-    - name: Upload Plugin Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: mokkybuddy-vscode-plugin
-        path: plugin/*.vsix
+      - name: Upload Plugin Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mokkybuddy-vscode-plugin
+          path: plugin/*.vsix
 
   publish:
     runs-on: ubuntu-latest
