@@ -68,11 +68,41 @@ jobs:
           JAVA_VER_CLEAN=${JAVA_VER/-SNAPSHOT/}
           echo "java_version_clean=$JAVA_VER_CLEAN" >> $GITHUB_OUTPUT
 
-      - name: Download JAR artifact from CI/CD
-        uses: actions/download-artifact@v4
-        with:
-          name: mokkyBuddyAPI-${{ steps.java_version_clean.outputs.java_version_clean }}
-          path: plugin/resources
+      - name: Download JAR artifact from Java App repo via API
+        id: download_jar
+        env:
+          JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
+        run: |
+          REPO="stapeDev/it.stapedev.api.mokkybuddy"
+          VERSION="${{ steps.java_version_clean.outputs.java_version_clean }}"
+          echo "Downloading artifact for version $VERSION from $REPO"
+
+          # Ottieni l'ID del release corrispondente
+          RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" \
+            | jq -r '.id')
+
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then
+            echo "Release not found!"
+            exit 1
+          fi
+
+          # Ottieni URL del JAR asset
+          ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
+            | jq -r '.[] | select(.name | endswith(".jar")) | .url')
+
+          if [ -z "$ASSET_URL" ]; then
+            echo "Artifact JAR not found!"
+            exit 1
+          fi
+
+          # Scarica il JAR
+          curl -L -H "Authorization: token $JAVA_APP_PAT" \
+              -H "Accept: application/octet-stream" \
+              "$ASSET_URL" -o plugin/resources/mokkyBuddyAPI.jar
 
       - name: Copy Jar to fixed name
         id: set_fixed_name
