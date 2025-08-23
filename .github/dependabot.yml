@@ -2,7 +2,7 @@ version: 2
 updates:
   # Node.js / NPM dependencies
   - package-ecosystem: "npm"
-    directory: "../package.json"  # percorso del package.json della VS Code extension
+    directory: "/"  # percorso del package.json della VS Code extension
     schedule:
       interval: "weekly"
     commit-message:
