@@ -2,7 +2,7 @@
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally easly",
-  "version": "1.0.57",
+  "version": "1.0.61",
   "publisher": "StapeDev",
   "icon": "resources/logo.png",
   "repository": {
@@ -131,7 +131,7 @@
     "@typescript-eslint/parser": "^8.40.0",
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.25.9",
-    "eslint": "^9.33.0",
+    "eslint": "^9.34.0",
     "jest": "^30.0.5",
     "mocha": "^11.7.1",
     "ts-jest": "^29.4.1",
