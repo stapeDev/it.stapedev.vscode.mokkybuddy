@@ -212,19 +212,23 @@ jobs:
 
           # --- Generazione CHANGELOG.md e FEATURES.md dalla repo Java ---
           cd ../app
+
+          # Determina il range dei commit
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            RANGE="HEAD~20..HEAD"
-          else
+          if [ -n "$LAST_TAG" ]; then
             RANGE="$LAST_TAG..HEAD"
+          else
+            RANGE=$(git rev-list --max-parents=0 HEAD)..HEAD
           fi
 
-          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)")
-          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)")
-          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)")
-          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)")
+          # Recupera i commit ordinati cronologicamente
+          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
+          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
+          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse)
+          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse)
 
           cd ../plugin
+
           # CHANGELOG.md
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
@@ -242,7 +246,7 @@ jobs:
             echo "# Features" > FEATURES.md
           fi
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          echo "$FEATS" >> FEATURES.md
+          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
 
           # Commit su main
           git config user.name "github-actions"
