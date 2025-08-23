@@ -2,7 +2,7 @@
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally easly",
-  "version": "1.0.55",
+  "version": "1.0.60",
   "publisher": "StapeDev",
   "icon": "resources/logo.png",
   "repository": {
@@ -14,6 +14,13 @@
   },
   "categories": [
     "Other"
+  ],
+  "files": [
+    "dist",
+    "resources/mokkyBuddyAPI.jar",
+    "resources/logo.png",
+    "vss-extension.json",
+    "LICENSE"
   ],
   "activationEvents": [
     "onCommand:mokkyBuddyAPIRunner.toggleServer",

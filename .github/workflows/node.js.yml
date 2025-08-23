@@ -15,7 +15,7 @@ jobs:
   checkout:
     runs-on: ubuntu-latest
     outputs:
-      java_version: ${{ steps.get_java_version.outputs.version }}
+      java_version_clean: ${{ steps.get_java_version_clean.outputs.java_version_clean }}
     steps:
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
@@ -24,7 +24,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      - name: Checkout Java App Repo
+      - name: Checkout Java App Repo (main branch for reference)
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
@@ -38,10 +38,11 @@ jobs:
           node-version: 20
 
       - name: Get Java App version
-        id: get_java_version
+        id: get_java_version_clean
         run: |
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION_CLEAN=${VERSION/-SNAPSHOT/}
+          echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
       - name: Upload plugin directory
         uses: actions/upload-artifact@v4
@@ -61,18 +62,38 @@ jobs:
           name: plugin-files
           path: plugin
 
-      - name: Download JAR artifact from CI/CD
-        uses: actions/download-artifact@v4
-        with:
-          name: mokkyBuddyAPI
-          path: plugin/resources
-
-      - name: Copy Jar to fixed name
-        id: set_fixed_name
+      - name: Download JAR artifact from Java App release
+        id: download_jar
+        env:
+          JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
         run: |
-          JAR_FILE=$(ls plugin/resources/*.jar | head -n 1)
-          cp "$JAR_FILE" plugin/resources/mokkyBuddyAPI.jar
-          echo "jar_file=plugin/resources/mokkyBuddyAPI.jar" >> $GITHUB_OUTPUT
+          REPO="stapeDev/it.stapedev.api.mokkybuddy"
+          VERSION="${{ needs.checkout.outputs.java_version_clean }}"
+          echo "Downloading artifact for version $VERSION from $REPO"
+
+          RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" \
+            | jq -r '.id')
+
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then
+            echo "Release not found!"
+            exit 1
+          fi
+
+          ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
+            | jq -r '.[] | select(.name | endswith(".jar")) | .url')
+
+          if [ -z "$ASSET_URL" ]; then
+            echo "Artifact JAR not found!"
+            exit 1
+          fi
+
+          curl -L -H "Authorization: token $JAVA_APP_PAT" \
+              -H "Accept: application/octet-stream" \
+              "$ASSET_URL" -o plugin/resources/mokkyBuddyAPI.jar
 
       - name: Upload updated plugin directory
         uses: actions/upload-artifact@v4
@@ -110,7 +131,7 @@ jobs:
         id: version_check
         working-directory: plugin
         run: |
-          VERSION=${{ needs.checkout.outputs.java_version }}
+          VERSION=${{ needs.checkout.outputs.java_version_clean }}
           EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$VERSION --json || echo "{}")
           if [[ $EXISTS != "{}" ]]; then
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -121,7 +142,7 @@ jobs:
       - name: Set plugin version
         working-directory: plugin
         run: |
-          JAVA_VERSION=${{ needs.checkout.outputs.java_version }}
+          JAVA_VERSION=${{ needs.checkout.outputs.java_version_clean }}
           CURRENT_VERSION=$(jq -r '.version' package.json)
           if [ "${{ steps.version_check.outputs.exists }}" == "true" ]; then
             NEW_VERSION=$(npm version patch --no-git-tag-version)
@@ -184,17 +205,14 @@ jobs:
         run: |
           VERSION=$(jq -r '.version' package.json)
 
-          # Aggiorna badge versione nel README
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
 
-          # Crea CHANGELOG se non esiste
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
           fi
           echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
           echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
 
-          # Crea FEATURES.md se non esiste
           if [ ! -f FEATURES.md ]; then
             echo "# Features" > FEATURES.md
             echo "- Start/Stop local mock server" >> FEATURES.md
@@ -202,11 +220,9 @@ jobs:
             echo "- Preview JSON responses" >> FEATURES.md
           fi
 
-          # Config Git e commit
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add README.md CHANGELOG.md FEATURES.md
-
           if ! git diff --cached --quiet; then
             git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
             git push origin main --force-with-lease
