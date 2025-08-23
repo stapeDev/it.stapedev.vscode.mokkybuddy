@@ -61,19 +61,17 @@ jobs:
           name: plugin-files
           path: plugin
 
-      - name: Download JAR from Java App Release
-        id: download_jar
-        run: |
-          VERSION=${{ needs.checkout.outputs.java_version }}
-          echo "Downloading MokkyBuddyAPI-$VERSION.jar"
-          curl -L -o plugin/resources/mokkyBuddyAPI-$VERSION.jar \
-            https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
+      - name: Download JAR artifact from CI/CD
+        uses: actions/download-artifact@v4
+        with:
+          name: mokkyBuddyAPI
+          path: plugin/resources
 
       - name: Copy Jar to fixed name
         id: set_fixed_name
         run: |
-          VERSION=${{ needs.checkout.outputs.java_version }}
-          cp plugin/resources/mokkyBuddyAPI-$VERSION.jar plugin/resources/mokkyBuddyAPI.jar
+          JAR_FILE=$(ls plugin/resources/*.jar | head -n 1)
+          cp "$JAR_FILE" plugin/resources/mokkyBuddyAPI.jar
           echo "jar_file=plugin/resources/mokkyBuddyAPI.jar" >> $GITHUB_OUTPUT
 
       - name: Upload updated plugin directory
@@ -225,26 +223,32 @@ jobs:
           path: plugin
 
   build-plugin:
-    runs-on: ubuntu-latest
-    needs: update-docs
-    steps:
-      - name: Download final plugin directory
-        uses: actions/download-artifact@v4
-        with:
-          name: plugin-final
-          path: plugin
+  runs-on: ubuntu-latest
+  needs: update-docs
+  steps:
+    - name: Download final plugin directory
+      uses: actions/download-artifact@v4
+      with:
+        name: plugin-final
+        path: plugin
 
-      - name: Build VSCode Plugin
-        working-directory: plugin
-        run: |
-          npm install
-          npx vsce package
+    - name: Install dependencies
+      working-directory: plugin
+      run: npm install
 
-      - name: Upload Plugin Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mokkybuddy-vscode-plugin
-          path: plugin/*.vsix
+    - name: Run tests
+      working-directory: plugin
+      run: npm test
+
+    - name: Build VSCode Plugin
+      working-directory: plugin
+      run: npx vsce package
+
+    - name: Upload Plugin Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: mokkybuddy-vscode-plugin
+        path: plugin/*.vsix
 
   publish:
     runs-on: ubuntu-latest

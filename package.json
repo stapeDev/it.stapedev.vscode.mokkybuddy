@@ -89,7 +89,7 @@
       "properties": {
         "mokkyBuddy.javaPath": {
           "type": "string",
-          "default": "java",
+          "default": "C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe",
           "description": "Full path to the Java executable to use for starting the Mokky Buddy server."
         },
         "mokkyBuddy.serverPort": {
@@ -108,14 +108,15 @@
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "package-prod": "npm run check-types && npm run lint && node esbuild.js --minify",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
+    "compile-tests": "tsc -p . --outDir dist",
+    "watch-tests": "tsc -p . -w --outDir dist",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "test": "node ./out/test/runTest.js"
+    "test": "jest --config jest.config.js --runInBand"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.11",
     "@types/vscode": "^1.79.0",
@@ -124,7 +125,9 @@
     "@vscode/test-electron": "^2.5.2",
     "esbuild": "^0.25.9",
     "eslint": "^9.33.0",
+    "jest": "^30.0.5",
     "mocha": "^11.7.1",
+    "ts-jest": "^29.4.1",
     "typescript": "^5.9.2",
     "vscode": "^1.1.37"
   }

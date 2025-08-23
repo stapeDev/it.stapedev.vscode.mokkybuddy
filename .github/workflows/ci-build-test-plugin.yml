@@ -42,8 +42,14 @@ jobs:
           curl -L -o plugin/resources/mokkyBuddyAPI.jar \
             https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
 
+      - name: Install dependencies
+        working-directory: plugin
+        run: npm install
+
+      - name: Run tests
+        working-directory: plugin
+        run: npm test
+
       - name: Build VSCode Plugin
         working-directory: plugin
-        run: |
-          npm install
-          npx vsce package
+        run: npx vsce package
