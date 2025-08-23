@@ -82,7 +82,7 @@ jobs:
           name: plugin-files-updated
           path: plugin
 
-  update-version:
+  bump-version:
     runs-on: ubuntu-latest
     needs: prepare-jar
     steps:
@@ -93,7 +93,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      - name: Reset working directory and sync with remote
+      - name: Reset working directory
         working-directory: plugin
         run: |
           git fetch origin main
@@ -108,56 +108,75 @@ jobs:
       - name: Copy files into checked-out repo
         run: cp -R tmp_plugin/* plugin/
 
-      - name: Check if version exists on Marketplace
-        id: version_check
+      - name: Determine version bump
+        id: version_bump
         working-directory: plugin
         run: |
-          VERSION=${{ needs.checkout.outputs.java_version }}
-          EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$VERSION --json || echo "{}")
-          if [[ $EXISTS != "{}" ]]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          LAST_COMMIT=$(git log -1 --pretty=%B)
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          NEW_BRANCH=""
+
+          if [[ "$LAST_COMMIT" == *"BREAKING CHANGE"* ]]; then
+            MAJOR=$((MAJOR+1))
+            MINOR=0
+            PATCH=0
+            NEW_BRANCH="versions/${MAJOR}.${MINOR}.X"
+          elif [[ "$LAST_COMMIT" == feat:* ]]; then
+            MINOR=$((MINOR+1))
+            PATCH=0
+            NEW_BRANCH="versions/${MAJOR}.${MINOR}.X"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            PATCH=$((PATCH+1))
+            NEW_BRANCH="versions/${MAJOR}.${MINOR}.X"
           fi
 
-      - name: Set plugin version
-        working-directory: plugin
-        run: |
-          JAVA_VERSION=${{ needs.checkout.outputs.java_version }}
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          if [ "${{ steps.version_check.outputs.exists }}" == "true" ]; then
-            NEW_VERSION=$(npm version patch --no-git-tag-version)
-          else
-            npm version $JAVA_VERSION --no-git-tag-version
-            NEW_VERSION=$JAVA_VERSION
-          fi
+          # Controlla se la versione esiste già e aumenta il patch se necessario
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          while npx vsce show StapeDev.mokky-buddy-api-runner@$NEW_VERSION --json >/dev/null 2>&1; do
+            PATCH=$((PATCH+1))
+            NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          done
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "branch=$NEW_BRANCH" >> $GITHUB_OUTPUT
+
+          # Aggiorna file
           jq --arg v "$NEW_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
           mv vss-extension.tmp.json vss-extension.json
+          echo $NEW_VERSION > VERSION
 
-      - name: Commit version bump
+      - name: Commit and push version on main
         working-directory: plugin
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
-          if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version and JAR [skip ci]"
-            git push origin main --force-with-lease
-          else
-            echo "No changes to commit"
-          fi
+          git add package.json vss-extension.json VERSION resources/mokkyBuddyAPI.jar
+          git commit -m "Update plugin version to ${{ steps.version_bump.outputs.new_version }} [skip ci]" || echo "No changes to commit"
+          git push origin main --force-with-lease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload plugin directory
+      - name: Create or update release branch
+        if: ${{ steps.version_bump.outputs.branch != '' }}
+        working-directory: plugin
+        run: |
+          git fetch origin
+          git checkout -B ${{ steps.version_bump.outputs.branch }} main
+          git push origin ${{ steps.version_bump.outputs.branch }} --force
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload plugin directory after version bump
         uses: actions/upload-artifact@v4
         with:
-          name: plugin-files-updated-version
+          name: plugin-versioned
           path: plugin
 
   update-docs:
     runs-on: ubuntu-latest
-    needs: update-version
+    needs: bump-version
     steps:
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
@@ -166,7 +185,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
 
-      - name: Reset working directory and sync with remote
+      - name: Reset working directory
         working-directory: plugin
         run: |
           git fetch origin main
@@ -175,50 +194,45 @@ jobs:
       - name: Download plugin directory
         uses: actions/download-artifact@v4
         with:
-          name: plugin-files-updated-version
+          name: plugin-versioned
           path: tmp_plugin
 
-      - name: Copy files into checked-out repo
+      - name: Copy files
         run: cp -R tmp_plugin/* plugin/
 
-      - name: Update README, CHANGELOG, FEATURES
+      - name: Update README, CHANGELOG, FEATURES on main and branch
         working-directory: plugin
         run: |
           VERSION=$(jq -r '.version' package.json)
-
-          # Aggiorna badge versione nel README
+          FILES=("README.md" "CHANGELOG.md" "FEATURES.md")
+          
+          # Aggiorna README badge
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
 
           # Crea CHANGELOG se non esiste
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-          fi
+          [ ! -f CHANGELOG.md ] && echo "# Changelog" > CHANGELOG.md
           echo "## $VERSION - $(date +'%Y-%m-%d')" >> CHANGELOG.md
           echo "- Updated plugin to match Java App version $VERSION" >> CHANGELOG.md
 
           # Crea FEATURES.md se non esiste
-          if [ ! -f FEATURES.md ]; then
-            echo "# Features" > FEATURES.md
-            echo "- Start/Stop local mock server" >> FEATURES.md
-            echo "- Add/Edit/Delete API endpoints" >> FEATURES.md
-            echo "- Preview JSON responses" >> FEATURES.md
-          fi
+          [ ! -f FEATURES.md ] && echo -e "# Features\n- Start/Stop local mock server\n- Add/Edit/Delete API endpoints\n- Preview JSON responses" > FEATURES.md
 
-          # Config Git e commit
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add README.md CHANGELOG.md FEATURES.md
+          git add "${FILES[@]}"
+          git commit -m "Update docs for $VERSION [skip ci]" || echo "No changes to commit"
+          git push origin main --force-with-lease
 
-          if ! git diff --cached --quiet; then
-            git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
-            git push origin main --force-with-lease
-          else
-            echo "No changes to commit"
+          # Aggiorna branch di release se esiste
+          if [[ -n "${{ steps.version_bump.outputs.branch }}" ]]; then
+            git checkout ${{ steps.version_bump.outputs.branch }}
+            git merge main --no-ff -m "Sync docs for $VERSION [skip ci]" || echo "No changes to merge"
+            git push origin ${{ steps.version_bump.outputs.branch }} --force
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload plugin directory after docs update
+      - name: Upload plugin-final
         uses: actions/upload-artifact@v4
         with:
           name: plugin-final
@@ -266,4 +280,3 @@ jobs:
         run: npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
