@@ -97,7 +97,7 @@
       "properties": {
         "mokkyBuddy.javaPath": {
           "type": "string",
-          "default": "C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe",
+          "default": "java",
           "description": "Full path to the Java executable to use for starting the Mokky Buddy server."
         },
         "mokkyBuddy.serverPort": {
