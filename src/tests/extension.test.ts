@@ -11,7 +11,6 @@ mockFs.writeFileSync.mockReturnValue(undefined);
 jest.spyOn(outputChannel, 'appendLine').mockImplementation(() => {});
 jest.spyOn(outputChannel, 'show').mockImplementation(() => {});
 
-
 jest.mock('vscode', () => ({
   window: {
     showInputBox: jest.fn(),
@@ -48,14 +47,16 @@ const vscode = require('vscode');
 
 describe('Mokky Buddy Extension - No Regression', () => {
   let context: any;
-  let outputChannel: any;
+  let registerCommandMock: jest.Mock;
 
   beforeEach(async () => {
     context = { subscriptions: [], globalStoragePath: '/tmp/fake-storage', extensionPath: '/tmp/fake-extension' };
     jest.clearAllMocks();
     extensionServers.forEach(s => s.apiList = []);
     await extension.activate(context);
-    outputChannel = (vscode.window.createOutputChannel as jest.Mock).mock.results[0]?.value;
+
+    // Cast di registerCommand a jest.Mock per evitare errori TS
+    registerCommandMock = vscode.commands.registerCommand as jest.Mock;
   });
 
   it('should activate without errors', () => {
@@ -79,22 +80,23 @@ describe('Mokky Buddy Extension - No Regression', () => {
       'mokkyBuddyAPIRunner.loadAPIConfig',
       'mokkyBuddyAPIRunner.changePort'
     ];
-    commands.forEach(cmd => expect(vscode.commands.registerCommand).toHaveBeenCalledWith(cmd, expect.any(Function)));
+    commands.forEach(cmd => expect(registerCommandMock).toHaveBeenCalledWith(cmd, expect.any(Function)));
   });
 
   it('should add and delete API', async () => {
     const server = extensionServers[0];
-    (vscode.window.showInputBox as jest.Mock)
-      .mockResolvedValueOnce('/test-api')
-      .mockResolvedValueOnce(JSON.stringify({ ok: true }))
-      .mockResolvedValueOnce(JSON.stringify({}))
-      .mockResolvedValueOnce(JSON.stringify({}));
 
-    const addApiCommand = vscode.commands.registerCommand.mock.calls.find((c:any) => c[0] === 'mokkyBuddyAPIRunner.addAPI')[1];
+    (vscode.window.showInputBox as jest.Mock)
+      .mockResolvedValueOnce('/test-api')            // path
+      .mockResolvedValueOnce(JSON.stringify({ ok: true }))  // response
+      .mockResolvedValueOnce(JSON.stringify({}))    // expectedBody
+      .mockResolvedValueOnce(JSON.stringify({}));   // jsonSchema
+
+    const addApiCommand = registerCommandMock.mock.calls.find((c: any) => c[0] === 'mokkyBuddyAPIRunner.addAPI')[1];
     await addApiCommand(server);
     expect(server.apiList.length).toBe(1);
 
-    const deleteApiCommand = vscode.commands.registerCommand.mock.calls.find((c:any) => c[0] === 'mokkyBuddyAPIRunner.deleteAPI')[1];
+    const deleteApiCommand = registerCommandMock.mock.calls.find((c: any) => c[0] === 'mokkyBuddyAPIRunner.deleteAPI')[1];
     await deleteApiCommand(server, '/test-api', 'GET');
     expect(server.apiList.length).toBe(0);
   });
@@ -103,21 +105,21 @@ describe('Mokky Buddy Extension - No Regression', () => {
     const server = extensionServers[0];
     server.apiList.push({ path: '/save-api', method: 'POST' });
 
-    const saveApiCommand = vscode.commands.registerCommand.mock.calls.find((c:any) => c[0] === 'mokkyBuddyAPIRunner.saveAPIConfig')[1];
+    const saveApiCommand = registerCommandMock.mock.calls.find((c: any) => c[0] === 'mokkyBuddyAPIRunner.saveAPIConfig')[1];
     await saveApiCommand(server);
     expect(mockFs.writeFileSync).toHaveBeenCalled();
 
     const fakeFile = '/tmp/fake-api-config.json';
     mockFs.readFileSync.mockReturnValue(JSON.stringify([{ path: '/loaded-api', method: 'GET' }]));
     (vscode.window.showOpenDialog as jest.Mock).mockResolvedValueOnce([{ fsPath: fakeFile }]);
-    const loadApiCommand = vscode.commands.registerCommand.mock.calls.find((c:any) => c[0] === 'mokkyBuddyAPIRunner.loadAPIConfig')[1];
+    const loadApiCommand = registerCommandMock.mock.calls.find((c: any) => c[0] === 'mokkyBuddyAPIRunner.loadAPIConfig')[1];
     await loadApiCommand(server);
     expect(server.apiList[0].path).toBe('/loaded-api');
   });
 
   it('should toggle server running state', async () => {
     const server = extensionServers[0];
-    const toggleCommand = vscode.commands.registerCommand.mock.calls.find((c:any) => c[0] === 'mokkyBuddyAPIRunner.toggleServer')[1];
+    const toggleCommand = registerCommandMock.mock.calls.find((c: any) => c[0] === 'mokkyBuddyAPIRunner.toggleServer')[1];
 
     server.running = false; await toggleCommand(server); expect(server.running).toBe(true);
     server.running = true; await toggleCommand(server); expect(server.running).toBe(false);
@@ -126,9 +128,8 @@ describe('Mokky Buddy Extension - No Regression', () => {
   it('should change server port', async () => {
     const server = extensionServers[0];
     (vscode.window.showInputBox as jest.Mock).mockResolvedValueOnce('8082');
-    const changePortCommand = vscode.commands.registerCommand.mock.calls.find((c:any) => c[0] === 'mokkyBuddyAPIRunner.changePort')[1];
+    const changePortCommand = registerCommandMock.mock.calls.find((c: any) => c[0] === 'mokkyBuddyAPIRunner.changePort')[1];
     await changePortCommand(server);
     expect(server.port).toBe(8082);
   });
-
 });

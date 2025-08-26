@@ -79,6 +79,10 @@
       {
         "command": "mokkyBuddyAPIRunner.changePort",
         "title": "MokkyBuddy: Set Server Port"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.selectApiMode",
+        "title": "MokkyBuddy: Select API Mode"
       }
     ],
     "menus": {
@@ -103,6 +107,15 @@
           "type": "number",
           "default": 8081,
           "description": "Port on which the Mokky Buddy server will run"
+        },
+        "mokkyBuddy.apiMode": {
+          "type": "string",
+          "enum": [
+            "file",
+            "database"
+          ],
+          "default": "file",
+          "description": "Select whether Mokky Buddy APIs are stored in local files or accessed via database API."
         }
       }
     }
@@ -123,9 +136,11 @@
     "test": "jest --config jest.config.js --runInBand"
   },
   "devDependencies": {
+    "@types/form-data": "^2.2.1",
     "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.11",
+    "@types/node-fetch": "^2.6.13",
     "@types/vscode": "^1.79.0",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
     "@typescript-eslint/parser": "^8.40.0",
@@ -137,5 +152,9 @@
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2",
     "vscode": "^1.1.37"
+  },
+  "dependencies": {
+    "form-data": "^4.0.4",
+    "node-fetch": "^2.7.0"
   }
 }
