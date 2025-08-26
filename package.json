@@ -19,6 +19,7 @@
     "dist",
     "resources/mokkyBuddyAPI.jar",
     "resources/logo.png",
+    "resources/icon.svg",
     "vss-extension.json",
     "LICENSE"
   ],
