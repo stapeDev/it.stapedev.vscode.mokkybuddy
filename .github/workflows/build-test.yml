@@ -101,6 +101,7 @@ jobs:
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -135,6 +136,7 @@ jobs:
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
