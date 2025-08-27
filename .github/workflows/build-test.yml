@@ -120,7 +120,7 @@ jobs:
               git rebase origin/$CURRENT_BRANCH
             fi
 
-            git push origin HEAD:${GITHUB_HEAD_REF:-${GITHUB_REF##*/}} --force-with-lease
+            git push origin HEAD:$GITHUB_HEAD_REF --force-with-lease
 
           else
             echo "No changes to commit"
@@ -164,7 +164,7 @@ jobs:
               git rebase origin/$CURRENT_BRANCH
             fi
 
-            git push origin HEAD:${GITHUB_HEAD_REF:-${GITHUB_REF##*/}} --force-with-lease
+            git push origin HEAD:$GITHUB_HEAD_REF --force-with-lease
 
           else
             echo "No changes to commit"
