@@ -50,18 +50,21 @@ jobs:
       - name: Download JAR from Java App Release
         run: |
           VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
-          echo "Downloading mokkyBuddyAPI-${VERSION}.jar"
+          TARGET_DIR=plugin/resources
+          TARGET_FILE=$TARGET_DIR/mokkyBuddyAPI.jar
 
-          # Assicuriamoci che la cartella esista
-          mkdir -p plugin/resources
+          echo "Ensuring target directory exists: $TARGET_DIR"
+          mkdir -p $TARGET_DIR
 
-          curl -L -o plugin/resources/mokkyBuddyAPI.jar \
-            "https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar"
-
-          # Verifica file
-          if [ ! -f plugin/resources/mokkyBuddyAPI.jar ]; then
-            echo "ERROR: JAR file not downloaded!"
-            ls -la plugin/resources
+          JAR_URL="https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar"
+          echo "Downloading $JAR_URL to $TARGET_FILE"
+          
+          curl -fL "$JAR_URL" -o "$TARGET_FILE"
+          
+          # Controllo file scaricato
+          if [ ! -s "$TARGET_FILE" ]; then
+            echo "ERROR: Downloaded JAR is empty!"
+            ls -la $TARGET_DIR
             exit 1
           fi
 
