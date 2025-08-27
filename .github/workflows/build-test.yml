@@ -143,12 +143,14 @@ jobs:
           git fetch --tags --prune || true
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           RANGE="${LAST_TAG:+$LAST_TAG..HEAD}"
+
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
           FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
           CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse || true)
           BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse || true)
           cd ../plugin
 
+          # CHANGELOG.md
           [ ! -f CHANGELOG.md ] && echo "# Changelog" > CHANGELOG.md
           TMP=$(mktemp)
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> "$TMP"
@@ -156,12 +158,16 @@ jobs:
           [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
           [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
           [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> "$TMP"
-          cat "$TMP" CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
+          cat "$TMP" CHANGELOG.md > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
           rm -f "$TMP"
 
+          # FEATURES.md
           [ ! -f FEATURES.md ] && echo "# Features" > FEATURES.md
-          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
+          {
+            echo "## Version $VERSION ($(date +'%Y-%m-%d'))"
+            [ -n "$FEATS" ] && echo "$FEATS"
+          } >> FEATURES.md
 
       - name: Commit version & docs updates
         working-directory: plugin
