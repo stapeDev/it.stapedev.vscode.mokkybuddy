@@ -104,27 +104,48 @@ jobs:
       # -------------------------------
       - name: Commit version bump and JAR
         working-directory: plugin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
+          # debug
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_HEAD_REF='$GITHUB_HEAD_REF'"
+
+          # Calcola il nome completo del branch (PR -> GITHUB_HEAD_REF, push -> refs/heads/<branch>)
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          echo "Target branch: '$BRANCH'"
+
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
           git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
-          if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version and JAR [skip ci]"
 
-            CURRENT_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF##*/}}
-
-            # Push safely: se branch esiste su remoto, rebase
-            if git ls-remote --exit-code origin $CURRENT_BRANCH; then
-              git fetch origin $CURRENT_BRANCH
-              git rebase origin/$CURRENT_BRANCH
-            fi
-
-            git push origin HEAD:$GITHUB_HEAD_REF --force-with-lease
-
-          else
+          if git diff --cached --quiet; then
             echo "No changes to commit"
+            exit 0
           fi
+
+          git commit -m "Update plugin version and JAR [skip ci]"
+
+          # Se il branch esiste sul remoto, rebase per evitare divergenze
+          if git ls-remote --exit-code origin "refs/heads/${BRANCH}"; then
+            echo "Remote branch origin/${BRANCH} exists — will fetch & rebase"
+            # fetch remote branch into origin/${BRANCH}
+            git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+            git rebase "origin/${BRANCH}" || {
+              echo "Rebase failed — aborting rebase and exiting with error"
+              git rebase --abort || true
+              exit 1
+            }
+          else
+            echo "Remote branch origin/${BRANCH} does NOT exist — will push and create it"
+          fi
+
+          # Push using HEAD:<branch> to ensure we push to the correct remote ref (creates branch if needed)
+          git push origin "HEAD:${BRANCH}" --force-with-lease
+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
