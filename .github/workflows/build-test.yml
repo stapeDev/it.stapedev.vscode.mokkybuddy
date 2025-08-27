@@ -37,10 +37,35 @@ jobs:
           node-version: 20
 
       - name: Get Java App version
-        id: get_java_version
+        id: get_java_version_clean
         run: |
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION_CLEAN=${VERSION/-SNAPSHOT/}
+          echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
+
+      - name: Check Marketplace & set final plugin version
+        id: set_final_version
+        working-directory: plugin
+        run: |
+          JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+
+          # Controllo sul Marketplace
+          EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$JAVA_VERSION --json || echo "{}")
+          
+          if [[ $EXISTS != "{}" ]]; then
+            echo "Version $JAVA_VERSION already exists on Marketplace, bumping patch"
+            FINAL_VERSION=$(npm version patch --no-git-tag-version)
+          else
+            npm version $JAVA_VERSION --no-git-tag-version
+            FINAL_VERSION=$JAVA_VERSION
+          fi
+
+          # Aggiorna vss-extension.json
+          jq --arg v "$FINAL_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+          mv vss-extension.tmp.json vss-extension.json
+
+          echo "final_plugin_version=$FINAL_VERSION" >> $GITHUB_OUTPUT
 
   prepare-java-jar:
     runs-on: ubuntu-latest
@@ -49,6 +74,14 @@ jobs:
       - name: Download JAR from Java App release
         run: |
           VERSION=${{ needs.checkout-repos.outputs.final_plugin_version }}
+          echo "Downloading JAR for version $VERSION"
+
+          if [ -z "$VERSION" ]; then
+            echo "Error: VERSION is empty"
+            exit 1
+          fi
+
+          mkdir -p plugin/resources
           curl -L -o plugin/resources/mokkyBuddyAPI.jar \
             https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
 
