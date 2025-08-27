@@ -92,6 +92,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: prepare-java-jar
     steps:
+      - name: Debug - check plugin folder
+        run: |
+          echo "Listing contents of workspace:"
+          ls -R
+          if [ ! -d "plugin/.git" ]; then
+            echo "Error: plugin folder is not a git repository"
+            exit 1
+          fi
+
       - name: Commit version bump and JAR
         working-directory: plugin
         run: |
