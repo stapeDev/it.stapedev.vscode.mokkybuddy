@@ -99,23 +99,19 @@ jobs:
         working-directory: plugin
         run: |
           set -euo pipefail
-          VERSION=${{ steps.set_final_version.outputs.final_plugin_version }}
-          echo "Downloading JAR for version $VERSION"
 
-          if [ -z "$VERSION" ]; then
-            echo "Error: VERSION is empty"
-            exit 1
-          fi
+          VERSION=${{ steps.set_final_version.outputs.final_plugin_version }}
+          VERSION_NO_V=${VERSION#v}  # rimuove eventuale "v" iniziale
+
+          echo "Downloading JAR for version $VERSION_NO_V"
 
           mkdir -p resources
-          curl -fL -o resources/mokkyBuddyAPI.jar \
-            "https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar"
+          JAR_URL="https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION_NO_V}/mokkyBuddyAPI-${VERSION_NO_V}.jar"
 
-          if [ ! -f resources/mokkyBuddyAPI.jar ]; then
-            echo "Error: JAR not downloaded"
-            ls -la resources || true
-            exit 1
-          fi
+          echo "Using URL: $JAR_URL"
+
+          # -f per far fallire curl se 404
+          curl -fL -o resources/mokkyBuddyAPI.jar "$JAR_URL"
 
       # -------------------------------
       # Commit version bump and JAR (robust push)
