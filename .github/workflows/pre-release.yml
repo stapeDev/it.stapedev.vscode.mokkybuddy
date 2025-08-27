@@ -9,13 +9,8 @@ on:
 jobs:
   pre-release:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Set branch from payload
-        id: get_branch
-        run: |
-          echo "Branch to use: ${{ github.event.client_payload.ref }}"
-          echo "branch=${{ github.event.client_payload.ref }}" >> $GITHUB_OUTPUT
-
       - name: Download plugin artifact from build
         uses: actions/download-artifact@v4
         with:
@@ -25,9 +20,8 @@ jobs:
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
-          repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ steps.get_branch.outputs.branch }}
+          ref: ${{ github.event.workflow_run.head_branch }}
           path: plugin-repo
 
       - name: Create pre-release branch
@@ -49,8 +43,7 @@ jobs:
 
       - name: Publish VSCode Plugin as pre-release
         working-directory: plugin
-        run: |
-          npx @vscode/vsce publish --pre-release
+        run: npx @vscode/vsce publish --pre-release
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
@@ -59,6 +52,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          head: pre-release/${{ steps.get_branch.outputs.branch }}
-          title: "Pre-release ${{ steps.get_branch.outputs.branch }}"
+          head: pre-release/${{ github.event.workflow_run.head_branch }}
+          title: "Pre-release ${{ github.event.workflow_run.head_branch }}"
           body: "This is an automated pre-release PR."
