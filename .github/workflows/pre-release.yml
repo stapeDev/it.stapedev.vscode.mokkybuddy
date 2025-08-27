@@ -1,10 +1,11 @@
 name: Pre-release MokkyBuddy VSCode Plugin
 
 on:
-  workflow_run:
-    workflows: ["Build & Version MokkyBuddy VSCode Plugin"]
-    types:
-      - completed
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to release'
+        required: true
 
 jobs:
   pre-release:
