@@ -21,6 +21,7 @@ jobs:
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
 
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
@@ -49,6 +50,7 @@ jobs:
 
       - name: Check Marketplace & set final plugin version
         id: set_final_version
+        working-directory: plugin
         run: |
           JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
           CURRENT_VERSION=$(jq -r '.version' package.json)
@@ -73,6 +75,7 @@ jobs:
     needs: checkout-repos
     steps:
       - name: Download JAR from Java App release
+        working-directory: plugin
         run: |
           VERSION=${{ needs.checkout-repos.outputs.final_plugin_version }}
           echo "Downloading JAR for version $VERSION"
@@ -91,6 +94,7 @@ jobs:
     needs: prepare-java-jar
     steps:
       - name: Commit version bump and JAR
+        working-directory: plugin
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
@@ -112,18 +116,19 @@ jobs:
     needs: commit-plugin-version
     steps:
       - name: Generate CHANGELOG and FEATURES
+        working-directory: plugin
         run: |
           VERSION=$(jq -r '.version' package.json)
 
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
 
-          cd app
+          cd ../app
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           RANGE="${LAST_TAG}..HEAD"
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
           FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
 
-          cd ..
+          cd ../plugin
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> CHANGELOG.md
           [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> CHANGELOG.md
           [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> CHANGELOG.md
@@ -150,9 +155,11 @@ jobs:
     needs: update-docs
     steps:
       - name: Install dependencies
+        working-directory: plugin
         run: npm install
 
       - name: Run tests
+        working-directory: plugin
         run: npm test
 
   build-plugin:
@@ -160,10 +167,11 @@ jobs:
     needs: test-plugin
     steps:
       - name: Build VSCode Plugin
+        working-directory: plugin
         run: npx vsce package
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
           name: mokkybuddy-plugin
-          path: '*.vsix'   # tra apici per evitare problemi di parsing
+          path: plugin/*.vsix
