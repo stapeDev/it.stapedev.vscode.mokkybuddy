@@ -208,7 +208,7 @@ jobs:
       - name: Trigger Pre-Release Workflow
         run: |
           echo "Triggering pre-release on branch $CURRENT_BRANCH"
-           curl -X POST \
+          curl -X POST \
             -H "Authorization: token ${{ secrets.INTERNAL_PLUGIN_PAT }}" \
             -H "Accept: application/vnd.github+json" \
             -d "{\"event_type\": \"trigger-pre-release-plugin-build\", \"client_payload\": {\"branch\": \"$CURRENT_BRANCH\"}}" \
