@@ -71,6 +71,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: checkout-repos
     steps:
+      - name: Debug plugin folder
+        run: ls -R plugin
+
       - name: Download JAR from Java App release
         run: |
           VERSION=${{ needs.checkout-repos.outputs.final_plugin_version }}
@@ -85,6 +88,13 @@ jobs:
           curl -L -o plugin/resources/mokkyBuddyAPI.jar \
             https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
 
+      - name: Verify JAR download
+        run: |
+          if [ ! -f plugin/resources/mokkyBuddyAPI.jar ]; then
+            echo "Error: JAR not found after download"
+            exit 1
+          fi
+
   commit-plugin-version:
     runs-on: ubuntu-latest
     needs: prepare-java-jar
@@ -92,21 +102,20 @@ jobs:
       - name: Commit version bump and JAR
         working-directory: plugin
         run: |
+          echo "Current folder: $(pwd)"
+          git status
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
           git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version and JAR [skip ci]"
-            
             CURRENT_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF##*/}}
             git fetch origin $CURRENT_BRANCH
             git rebase origin/$CURRENT_BRANCH
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   update-docs:
     runs-on: ubuntu-latest
@@ -147,8 +156,6 @@ jobs:
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   test-plugin:
     runs-on: ubuntu-latest
