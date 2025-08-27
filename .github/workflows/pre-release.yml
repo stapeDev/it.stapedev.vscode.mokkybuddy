@@ -169,6 +169,7 @@ jobs:
           git push origin pre-release/$VERSION --force
 
       - name: Create pre-release tag
+        working-directory: plugin
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
           git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
