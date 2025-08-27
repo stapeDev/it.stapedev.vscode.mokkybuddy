@@ -18,6 +18,7 @@ jobs:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
+          fetch-depth: 0
 
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
@@ -139,44 +140,28 @@ jobs:
           VERSION=$(jq -r '.version' plugin/package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # --- Commit su branch pre-release ---
-      # Step per gestire pre-release e aggiornare branch corrente
-      - name: Checkout plugin repo for PR
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: plugin-repo
-          fetch-depth: 0
-
-      - name: Copy plugin files to repo
-        run: |
-          cp -R plugin/* plugin-repo/
-
+      # --- Commit e pre-release ---
       - name: Commit updates on current branch
-        working-directory: plugin-repo
+        working-directory: plugin
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          CURRENT_BRANCH=${GITHUB_REF_NAME}
           git add -A
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version, docs, resources [skip ci]" || echo "No changes to commit"
-            git push origin "$CURRENT_BRANCH" --force
+            git push origin "$CURRENT_BRANCH"
           fi
 
       - name: Create/update pre-release branch
-        working-directory: plugin-repo
         run: |
-          VERSION=$(jq -r '.version' package.json)
-          git checkout -B pre-release/$VERSION
-          git add -A
-          git commit -m "Prepare pre-release $VERSION [skip ci]" || echo "No changes to commit"
+          VERSION=${{ steps.set_version.outputs.version }}
+          git checkout -b pre-release/$VERSION
           git push origin pre-release/$VERSION --force
 
       - name: Create pre-release tag
-        working-directory: plugin-repo
         run: |
-          VERSION=$(jq -r '.version' package.json)
+          VERSION=${{ steps.set_version.outputs.version }}
           git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
           git push origin v$VERSION-pre --force
 
@@ -186,13 +171,12 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # --- Crea PR verso main dal branch pre-release ---
-      - name: Create PR to main
+      # --- Crea PR verso il branch corrente dal pre-release ---
+      - name: Create PR
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          base: main
+          base: ${{ github.ref_name }}
           branch: pre-release/${{ steps.set_version.outputs.version }}
           title: "Pre-release ${{ steps.set_version.outputs.version }}"
           body: "This is an automated pre-release PR."
-          path: plugin-repo
