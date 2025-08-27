@@ -211,5 +211,5 @@ jobs:
            curl -X POST \
             -H "Authorization: token ${{ secrets.INTERNAL_PLUGIN_PAT }}" \
             -H "Accept: application/vnd.github+json" \
-            -d '{"event_type": "trigger-pre-release-plugin-build", "branch":"$CURRENT_BRANCH"}' \
+            -d "{\"event_type\": \"trigger-pre-release-plugin-build\", \"client_payload\": {\"branch\": \"$CURRENT_BRANCH\"}}"
             https://api.github.com/repos/stapeDev/it.stapedev.vscode.mokkybuddy/dispatches
