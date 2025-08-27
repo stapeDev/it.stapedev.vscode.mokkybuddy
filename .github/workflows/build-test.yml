@@ -3,10 +3,9 @@ name: Build & Version MokkyBuddy VSCode Plugin
 on:
   push:
     branches:
-      - main
-  pull_request:
-    branches:
-      - main
+      - 'dependabot/**'
+      - 'features/**'
+      - 'feature/**'
 
 jobs:
   build-and-version:
