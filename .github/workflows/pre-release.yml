@@ -1,11 +1,8 @@
 name: Pre-release MokkyBuddy VSCode Plugin
 
 on:
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to release'
-        required: true
+  repository_dispatch:
+    types: [trigger-pre-release]
 
 jobs:
   pre-release:
