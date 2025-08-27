@@ -154,6 +154,7 @@ jobs:
           fi
 
       - name: Create/update pre-release branch
+        working-directory: plugin
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
           git checkout -b pre-release/$VERSION
