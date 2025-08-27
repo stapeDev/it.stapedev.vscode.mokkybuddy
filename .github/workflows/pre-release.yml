@@ -1,11 +1,8 @@
 name: Pre-release MokkyBuddy VSCode Plugin
 
 on:
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: "Branch to run pre-release on"
-        required: true
+  repository_dispatch:
+    types: [trigger-pre-release-plugin-build]
 
 jobs:
   pre-release:
@@ -22,7 +19,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.event.branch }}
           path: plugin-repo
 
       - name: Create pre-release branch

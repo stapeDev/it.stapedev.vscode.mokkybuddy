@@ -207,8 +207,8 @@ jobs:
       - name: Trigger Pre-Release Workflow
         run: |
           echo "Triggering pre-release on branch $CURRENT_BRANCH"
-          curl -X POST \
-            -H "Accept: application/vnd.github+json" \
+           curl -X POST \
             -H "Authorization: token ${{ secrets.INTERNAL_PLUGIN_PAT }}" \
-            https://api.github.com/repos/stapeDev/it.stapedev.vscode.mokkybuddy/dispatches \
-            -d "{\"ref\":\"$CURRENT_BRANCH\", \"inputs\": {\"branch\": \"$CURRENT_BRANCH\"}}"
+            -H "Accept: application/vnd.github+json" \
+            -d '{"event_type": "trigger-pre-release-plugin-build", "branch":"$CURRENT_BRANCH"}' \
+            https://api.github.com/repos/stapeDev/it.stapedev.vscode.mokkybuddy/dispatches
