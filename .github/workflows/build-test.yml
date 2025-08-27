@@ -191,7 +191,8 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version, docs, resources [skip ci]" || echo "commit failed"
             CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-            git push origin "$CURRENT_BRANCH" --force-with-lease
+            git pull --rebase origin "$CURRENT_BRANCH"
+            git push origin "$CURRENT_BRANCH"
           fi
 
       - name: Build VSCode Plugin (.vsix)
