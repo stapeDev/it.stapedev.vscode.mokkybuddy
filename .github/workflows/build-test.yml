@@ -27,7 +27,7 @@ jobs:
           ref: main
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
-          fetch-depth: 0        # <--- importante: prende tutta la history e i tag
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -41,11 +41,10 @@ jobs:
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
-      - name: Debug list plugin folder (confirm package.json exists)
+      - name: Debug list plugin folder
         run: |
           echo "Listing plugin directory"
           ls -la plugin || true
-          echo "If package.json is missing, the job will fail on the next step."
 
       - name: Download JAR artifact from Java App release
         id: download_jar
@@ -57,10 +56,7 @@ jobs:
           TARGET_DIR=plugin/resources
           TARGET_FILE=$TARGET_DIR/mokkyBuddyAPI.jar
 
-          echo "Ensuring target directory exists: $TARGET_DIR"
           mkdir -p $TARGET_DIR
-
-          echo "Downloading artifact for version $VERSION from $REPO"
 
           RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
             -H "Accept: application/vnd.github+json" \
@@ -86,7 +82,6 @@ jobs:
               -H "Accept: application/octet-stream" \
               "$ASSET_URL" -o "$TARGET_FILE"
 
-          # Verifica che il file non sia vuoto
           if [ ! -s "$TARGET_FILE" ]; then
             echo "ERROR: Downloaded JAR is empty!"
             exit 1
@@ -100,33 +95,30 @@ jobs:
         working-directory: plugin
         run: npm test
 
-      - name: Ensure jq available (debug)
-        run: |
-          echo "jq version:"
-          jq --version
+      - name: Ensure jq available
+        run: jq --version
 
-      - name: Get current plugin version (from package.json)
+      - name: Get current plugin version
         id: get_plugin_version
         working-directory: plugin
         run: |
-          if [ ! -f package.json ]; then
-            echo "package.json not found in plugin/ — failing early"
-            ls -la
-            exit 1
-          fi
           PLUGIN_VERSION=$(jq -r '.version' package.json)
           echo "plugin_version=$PLUGIN_VERSION" >> $GITHUB_OUTPUT
-          echo "Found plugin version: $PLUGIN_VERSION"
 
       - name: Update plugin version to Java app version
         working-directory: plugin
         run: |
           JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
-          echo "Setting plugin version to $JAVA_VERSION"
-          # If you prefer to bump patch when equals, replace the line below with conditional logic.
-          npm version $JAVA_VERSION --no-git-tag-version
+          CURRENT_VERSION=$(jq -r '.version' package.json)
 
-          # Update vss-extension.json too
+          if [ "$CURRENT_VERSION" == "$JAVA_VERSION" ]; then
+            echo "Version $JAVA_VERSION already set, bumping patch"
+            npm version patch --no-git-tag-version
+          else
+            echo "Updating version to $JAVA_VERSION"
+            npm version $JAVA_VERSION --no-git-tag-version
+          fi
+
           if [ -f vss-extension.json ]; then
             jq --arg v "$JAVA_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
             mv vss-extension.tmp.json vss-extension.json
@@ -139,82 +131,39 @@ jobs:
           set -x
 
           VERSION=$(jq -r '.version' package.json)
-          echo "Updating README badges to version $VERSION"
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
 
-          echo "Generating changelog/feature snippets from Java app"
-          # Assicuriamoci di trovarci nella cartella corretta
           if [ ! -d ../app ]; then
-            echo "ERROR: ../app directory not found. Listing workspace:"
+            echo "ERROR: ../app directory not found."
             ls -la
             exit 1
           fi
 
           cd ../app
-
-          # Assicuriamoci di avere i tag e la history completa
           git fetch --tags --prune || true
-
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
-            RANGE="HEAD"
-          else
-            RANGE="$LAST_TAG..HEAD"
-          fi
-          echo "Using git range: '$RANGE' (LAST_TAG='$LAST_TAG')"
-
-          # raccogliamo i log, ma non falliamo se non ci sono risultati
+          RANGE="${LAST_TAG:+$LAST_TAG..HEAD}"
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
-          FIXES=$(git log $RANGE --grep '^fix'  --pretty=format:"- %s (%an)" --reverse || true)
+          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
           CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse || true)
           BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse || true)
-
           cd ../plugin
 
-          # Assicuriamoci che CHANGELOG.md esista (touch evita cat fallito)
-          if [ ! -f CHANGELOG.md ]; then
-            echo "# Changelog" > CHANGELOG.md
-          fi
-
+          [ ! -f CHANGELOG.md ] && echo "# Changelog" > CHANGELOG.md
           TMP=$(mktemp)
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> "$TMP"
-
-          if [ -n "$FEATS" ]; then
-            echo -e "\n### Features" >> "$TMP"
-            echo "$FEATS" >> "$TMP"
-          fi
-
-          if [ -n "$FIXES" ]; then
-            echo -e "\n### Fixes" >> "$TMP"
-            echo "$FIXES" >> "$TMP"
-          fi
-
-          if [ -n "$CHORES" ]; then
-            echo -e "\n### Chores" >> "$TMP"
-            echo "$CHORES" >> "$TMP"
-          fi
-
-          if [ -n "$BREAKING" ]; then
-            echo -e "\n### BREAKING CHANGES" >> "$TMP"
-            echo "$BREAKING" >> "$TMP"
-          fi
-
-          # Unisco in modo sicuro: CHANGELOG.md esiste già
-          cat "$TMP" CHANGELOG.md > CHANGELOG.new
-          mv CHANGELOG.new CHANGELOG.md
+          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> "$TMP"
+          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
+          [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
+          [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> "$TMP"
+          cat "$TMP" CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
           rm -f "$TMP"
 
-          # FEATURES.md (stessa logica, ma più semplice)
-          if [ ! -f FEATURES.md ]; then
-            echo "# Features" > FEATURES.md
-          fi
-
+          [ ! -f FEATURES.md ] && echo "# Features" > FEATURES.md
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          if [ -n "$FEATS" ]; then
-            echo "$FEATS" >> FEATURES.md
-          fi
+          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
 
-      - name: Commit version & docs updates (if any)
+      - name: Commit version & docs updates
         working-directory: plugin
         run: |
           git config user.name "github-actions"
@@ -223,16 +172,9 @@ jobs:
 
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version, docs, resources [skip ci]" || echo "commit failed"
-
-            # Pusha sul branch corrente
             CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-            echo "Pushing changes to branch $CURRENT_BRANCH"
             git push origin "$CURRENT_BRANCH" --force-with-lease
-          else
-            echo "No changes to commit"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build VSCode Plugin (.vsix)
         working-directory: plugin
