@@ -182,9 +182,14 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add package.json vss-extension.json resources/mokkyBuddyAPI.jar README.md CHANGELOG.md FEATURES.md || true
+
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version, docs, resources [skip ci]" || echo "commit failed"
-            git push origin main --force-with-lease
+
+            # Pusha sul branch corrente
+            CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+            echo "Pushing changes to branch $CURRENT_BRANCH"
+            git push origin "$CURRENT_BRANCH" --force-with-lease
           else
             echo "No changes to commit"
           fi
