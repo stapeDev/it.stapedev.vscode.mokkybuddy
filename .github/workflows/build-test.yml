@@ -203,10 +203,12 @@ jobs:
         with:
           name: plugin-final
           path: plugin
+
       - name: Trigger Pre-Release Workflow
         run: |
+          echo "Triggering pre-release on branch $CURRENT_BRANCH"
           curl -X POST \
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/stapeDev/it.stapedev.vscode.mokkybuddy/actions/workflows/pre-release.yml/dispatches \
-            -d "{\"ref\":\"main\",\"inputs\":{\"branch\":\"${GITHUB_REF#refs/heads/}\"}}"
+            -d "{\"ref\":\"main\",\"inputs\":{\"branch\":\"$CURRENT_BRANCH\"}}"
