@@ -1,8 +1,10 @@
 name: Pre-release MokkyBuddy VSCode Plugin
 
 on:
-  repository_dispatch:
-    types: [trigger-pre-release]
+  workflow_run:
+    workflows: ["Build & Version MokkyBuddy VSCode Plugin"]
+    types:
+      - completed
 
 jobs:
   pre-release:
