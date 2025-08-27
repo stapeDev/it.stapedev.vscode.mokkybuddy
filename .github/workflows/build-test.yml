@@ -166,4 +166,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mokkybuddy-plugin
-          path: *.vsix
+          path: '*.vsix'   # tra apici per evitare problemi di parsing
