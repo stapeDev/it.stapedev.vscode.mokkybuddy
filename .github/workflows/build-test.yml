@@ -1,8 +1,6 @@
-name: Build & Test MokkyBuddy Plugin
+name: Build & Version MokkyBuddy VSCode Plugin
 
 on:
-  pull_request:
-    branches: ["main"]
   push:
     branches:
       - 'dependabot/**'
@@ -10,53 +8,31 @@ on:
       - 'feature/**'
 
 jobs:
-  build-and-commit:
+  build-and-version:
     runs-on: ubuntu-latest
+    outputs:
+      java_version_clean: ${{ steps.get_java_version_clean.outputs.java_version_clean }}
     steps:
-      # -------------------------------
-      # Checkout Plugin Repo
-      # -------------------------------
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
-          fetch-depth: 0
-          persist-credentials: true
 
-      # -------------------------------
-      # Checkout Java App Repo
-      # -------------------------------
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
           ref: main
-          token: ${{ secrets.JAVA_APP_PATH_DEPENDANT_BOT }}
+          token: ${{ secrets.JAVA_APP_PAT }}
           path: app
 
-      # -------------------------------
-      # Setup Node.js
-      # -------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      # -------------------------------
-      # Debug - check folder structure
-      # -------------------------------
-      - name: Debug - list workspace
-        run: |
-          echo "Workspace: $GITHUB_WORKSPACE"
-          ls -la
-          echo "Listing plugin folder (if exists):"
-          ls -la plugin || true
-
-      # -------------------------------
-      # Get Java App version
-      # -------------------------------
       - name: Get Java App version
         id: get_java_version_clean
         run: |
@@ -64,194 +40,60 @@ jobs:
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
-      # -------------------------------
-      # Check Marketplace & set plugin version
-      # -------------------------------
-      - name: Set final plugin version
-        id: set_final_version
-        working-directory: plugin
+      - name: Download JAR artifact from Java App release
         run: |
-          set -euo pipefail
-          JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
-          echo "JAVA_VERSION=$JAVA_VERSION"
+          VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
+          curl -L -o plugin/resources/mokkyBuddyAPI.jar \
+            https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
 
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          echo "CURRENT_VERSION=$CURRENT_VERSION"
-
-          EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$JAVA_VERSION --json || echo "{}")
-          if [[ $EXISTS != "{}" ]]; then
-            echo "Version $JAVA_VERSION exists on Marketplace, bumping patch"
-            FINAL_VERSION=$(npm version patch --no-git-tag-version)
-          else
-            npm version $JAVA_VERSION --no-git-tag-version
-            FINAL_VERSION=$JAVA_VERSION
-          fi
-
-          jq --arg v "$FINAL_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
-          mv vss-extension.tmp.json vss-extension.json
-
-          echo "final_plugin_version=$FINAL_VERSION" >> $GITHUB_OUTPUT
-
-      # -------------------------------
-      # Download JAR from Java App release
-      # -------------------------------
-      - name: Download JAR
-        working-directory: plugin
-        run: |
-          set -euo pipefail
-
-          VERSION=${{ steps.set_final_version.outputs.final_plugin_version }}
-          VERSION_NO_V=${VERSION#v}  # rimuove eventuale "v" iniziale
-
-          echo "Downloading JAR for version $VERSION_NO_V"
-
-          mkdir -p resources
-          JAR_URL="https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION_NO_V}/mokkyBuddyAPI-${VERSION_NO_V}.jar"
-
-          echo "Using URL: $JAR_URL"
-
-          # -f per far fallire curl se 404
-          curl -fL -o resources/mokkyBuddyAPI.jar "$JAR_URL"
-
-      # -------------------------------
-      # Commit version bump and JAR (robust push)
-      # -------------------------------
-      - name: Commit version bump and JAR
-        working-directory: plugin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          # debug
-          echo "GITHUB_REF=${GITHUB_REF:-}"
-          echo "GITHUB_HEAD_REF='${GITHUB_HEAD_REF:-}'"
-
-          # compute branch name (prefer PR head, otherwise strip refs/heads/)
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          echo "Target branch: '${BRANCH}'"
-
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-          # stage only the intended files
-          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
-
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
-
-          # preview staged changes
-          echo "Staged changes (name/status):"
-          git --no-pager diff --cached --name-status | sed -n '1,200p'
-
-          # safety: count staged deletions and abort if too many
-          DELETIONS=$(git diff --cached --name-status | awk '$1=="D"{count++} END{print (count+0)}')
-          echo "Staged deletions: $DELETIONS"
-          MAX_DEL=500
-          if [ "$DELETIONS" -gt "$MAX_DEL" ]; then
-            echo "Abort: staged deletions ($DELETIONS) exceed threshold ($MAX_DEL)."
-            git --no-pager diff --cached --name-status | sed -n '1,200p'
-            exit 1
-          fi
-
-          git commit -m "Update plugin version and JAR [skip ci]"
-
-          # if remote branch exists, fetch it and rebase to avoid unnecessary force
-          if git ls-remote --exit-code origin "refs/heads/${BRANCH}"; then
-            echo "Remote branch origin/${BRANCH} exists — fetching & rebasing"
-            git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
-            git rebase "origin/${BRANCH}" || {
-              echo "Rebase failed — aborting rebase and exiting with error"
-              git rebase --abort || true
-              exit 1
-            }
-          else
-            echo "Remote branch origin/${BRANCH} does NOT exist — will push and create it"
-          fi
-
-          # push using HEAD:<branch> to ensure correct remote ref; create if needed
-          git push origin "HEAD:${BRANCH}" --force-with-lease
-
-      # -------------------------------
-      # Generate docs (commit & push to same branch)
-      # -------------------------------
-      - name: Generate CHANGELOG and FEATURES
-        working-directory: plugin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          VERSION=$(jq -r '.version' package.json)
-          echo "Generating docs for version $VERSION"
-
-          # Update README badge
-          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
-
-          # Generate CHANGELOG from Java repo
-          cd ../app
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          RANGE="${LAST_TAG}..HEAD"
-          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
-          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
-
-          cd ../plugin
-          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> CHANGELOG.md
-          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> CHANGELOG.md
-          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> CHANGELOG.md
-
-          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
-
-          git add README.md CHANGELOG.md FEATURES.md
-
-          if git diff --cached --quiet; then
-            echo "No doc changes to commit"
-            exit 0
-          fi
-
-          echo "Staged doc changes:"
-          git --no-pager diff --cached --name-status | sed -n '1,200p'
-
-          # safety: count staged deletions in docs (lower threshold)
-          DELETIONS=$(git diff --cached --name-status | awk '$1=="D"{count++} END{print (count+0)}')
-          echo "Staged deletions in docs: $DELETIONS"
-          MAX_DEL_DOCS=200
-          if [ "$DELETIONS" -gt "$MAX_DEL_DOCS" ]; then
-            echo "Abort: staged doc deletions ($DELETIONS) exceed threshold ($MAX_DEL_DOCS)."
-            git --no-pager diff --cached --name-status | sed -n '1,200p'
-            exit 1
-          fi
-
-          git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
-
-          # calculate branch (PR vs push)
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          echo "Pushing docs to branch: '${BRANCH}'"
-
-          if git ls-remote --exit-code origin "refs/heads/${BRANCH}"; then
-            git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
-            git rebase "origin/${BRANCH}"
-          fi
-
-          git push origin "HEAD:${BRANCH}" --force-with-lease
-
-      # -------------------------------
-      # Install dependencies & run tests
-      # -------------------------------
       - name: Install dependencies
         working-directory: plugin
-        run: npm ci
+        run: npm install
 
       - name: Run tests
         working-directory: plugin
         run: npm test
 
-      # -------------------------------
-      # Build VSCode Plugin
-      # -------------------------------
+      - name: Update plugin version and package files
+        working-directory: plugin
+        run: |
+          JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
+          npm version $JAVA_VERSION --no-git-tag-version
+          jq --arg v "$JAVA_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+          mv vss-extension.tmp.json vss-extension.json
+
+      - name: Update README, CHANGELOG, FEATURES
+        working-directory: plugin
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
+          
+          cd ../app
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          RANGE=${LAST_TAG:-HEAD}..HEAD
+          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
+          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
+          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse)
+          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse)
+          cd ../plugin
+          
+          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> CHANGELOG.md
+          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> CHANGELOG.md
+          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> CHANGELOG.md
+          [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> CHANGELOG.md
+          [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> CHANGELOG.md
+
+      - name: Commit version and docs updates
+        working-directory: plugin
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Update plugin version, docs, resources [skip ci]"
+            git push origin main --force-with-lease
+          fi
+
       - name: Build VSCode Plugin
         working-directory: plugin
         run: npx vsce package
@@ -259,5 +101,5 @@ jobs:
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mokkybuddy-plugin
-          path: plugin/*.vsix
+          name: plugin-final
+          path: plugin

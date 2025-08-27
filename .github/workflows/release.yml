@@ -1,34 +1,49 @@
-name: Release MokkyBuddy Plugin
+name: Release MokkyBuddy VSCode Plugin
 
 on:
-  push:
-    branches:
-      - 'main'
+  workflow_run:
+    workflows: ["Pre-release MokkyBuddy VSCode Plugin"]
+    types:
+      - completed
 
 jobs:
-  download-artifact:
+  release:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Download plugin artifact from pre-release build
+      - name: Download plugin artifact from pre-release
         uses: actions/download-artifact@v4
         with:
-          name: mokkybuddy-plugin
+          name: plugin-final
           path: plugin
 
-  release-plugin:
-    runs-on: ubuntu-latest
-    needs: download-artifact
-    steps:
-      - name: Get plugin version
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin-repo
+
+      - name: Create release branch
         run: |
           VERSION=$(jq -r '.version' plugin/package.json)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout -b release/$VERSION
+          cp -R ../plugin/* ./plugin-repo/
+          git add -A
+          git commit -m "Prepare release $VERSION [skip ci]"
+          git push origin release/$VERSION --force
 
-      - name: Install VSCE
-        run: npm install -g @vscode/vsce
+      - name: Create release tag
+        run: |
+          VERSION=$(jq -r '.version' plugin/package.json)
+          git tag -fa v$VERSION -m "Release $VERSION"
+          git push origin v$VERSION --force
 
-      - name: Publish VSCode Plugin
+      - name: Publish VSCode Plugin as release
         working-directory: plugin
-        run: npx vsce publish
+        run: |
+          npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
