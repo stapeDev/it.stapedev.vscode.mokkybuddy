@@ -158,14 +158,33 @@ jobs:
           git add -A
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version, docs, resources [skip ci]" || echo "No changes to commit"
-            git push origin "$CURRENT_BRANCH"
+            git push origin "$CURRENT_BRANCH" --force
           fi
 
+      # --- Create/update pre-release branch allineato a main e cherry-pick dei commit del branch corrente ---
       - name: Create/update pre-release branch
         working-directory: plugin
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
-          git checkout -b pre-release/$VERSION
+          CURRENT_BRANCH=${GITHUB_REF_NAME}
+          
+          # Fetch main
+          git fetch origin main
+          
+          # Crea/aggiorna branch pre-release da main
+          git checkout -B pre-release/$VERSION origin/main
+          
+          # Trova i commit del branch corrente non ancora in main
+          COMMITS=$(git log origin/main..origin/$CURRENT_BRANCH --reverse --format="%H")
+          
+          if [ -n "$COMMITS" ]; then
+            echo "Cherry-picking commits from $CURRENT_BRANCH to pre-release/$VERSION"
+            git cherry-pick $COMMITS || echo "Conflitti risolti manualmente o ignorati"
+          else
+            echo "Nessun commit da cherry-pick"
+          fi
+          
+          # Push branch pre-release
           git push origin pre-release/$VERSION --force
 
       - name: Create pre-release tag
