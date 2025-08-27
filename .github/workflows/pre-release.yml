@@ -184,7 +184,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          head: pre-release/${{ steps.get_java_version_clean.outputs.java_version_clean }}
-          title: "Pre-release ${{ steps.get_java_version_clean.outputs.java_version_clean }}"
+          branch: pre-release/${{ steps.get_java_version.outputs.java_version_clean }}
+          title: "Pre-release ${{ steps.get_java_version.outputs.java_version_clean }}"
           body: "This is an automated pre-release PR."
           path: plugin-repo
