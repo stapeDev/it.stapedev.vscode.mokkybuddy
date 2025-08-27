@@ -2,7 +2,7 @@
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally easly",
-  "version": "1.0.70",
+  "version": "1.0.73",
   "publisher": "StapeDev",
   "icon": "resources/logo.png",
   "repository": {
@@ -19,6 +19,7 @@
     "dist",
     "resources/mokkyBuddyAPI.jar",
     "resources/logo.png",
+    "resources/icon.svg",
     "vss-extension.json",
     "LICENSE"
   ],
@@ -96,7 +97,7 @@
       "properties": {
         "mokkyBuddy.javaPath": {
           "type": "string",
-          "default": "C:\\tools\\java\\jdk-17.0.15+6\\bin\\java.exe",
+          "default": "java",
           "description": "Full path to the Java executable to use for starting the Mokky Buddy server."
         },
         "mokkyBuddy.serverPort": {
