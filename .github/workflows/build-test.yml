@@ -131,23 +131,35 @@ jobs:
           set -x
 
           VERSION=$(jq -r '.version' package.json)
+
+          echo "Updating README badges to version $VERSION"
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
 
+          echo "Generating changelog/feature snippets from Java app"
+          # Assicuriamoci di trovarci nella cartella corretta
           if [ ! -d ../app ]; then
-            echo "ERROR: ../app directory not found."
+            echo "ERROR: ../app directory not found. Listing workspace:"
             ls -la
             exit 1
           fi
 
           cd ../app
           git fetch --tags --prune || true
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          RANGE="${LAST_TAG:+$LAST_TAG..HEAD}"
 
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="$LAST_TAG..HEAD"
+          fi
+          echo "Using git range: '$RANGE' (LAST_TAG='$LAST_TAG')"
+
+          # Raccogliamo i log, ma non falliamo se non ci sono risultati
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
           FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
           CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse || true)
           BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse || true)
+
           cd ../plugin
 
           # CHANGELOG.md
@@ -164,10 +176,10 @@ jobs:
 
           # FEATURES.md
           [ ! -f FEATURES.md ] && echo "# Features" > FEATURES.md
-          {
-            echo "## Version $VERSION ($(date +'%Y-%m-%d'))"
-            [ -n "$FEATS" ] && echo "$FEATS"
-          } >> FEATURES.md
+          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
+          if [ -n "$FEATS" ]; then
+            echo "$FEATS" >> FEATURES.md
+          fi
 
       - name: Commit version & docs updates
         working-directory: plugin
