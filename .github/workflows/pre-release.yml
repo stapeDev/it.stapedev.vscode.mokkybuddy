@@ -1,0 +1,76 @@
+name: Pre-release MokkyBuddy Plugin
+
+on:
+  workflow_run:
+    workflows: ["Build & Test MokkyBuddy Plugin"]
+    types:
+      - completed
+
+jobs:
+  download-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download plugin artifact from build
+        uses: actions/download-artifact@v4
+        with:
+          name: mokkybuddy-plugin
+          path: plugin
+
+  pre-release:
+    runs-on: ubuntu-latest
+    needs: download-artifact
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout plugin repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
+
+      - name: Create temporary pre-release branch
+        run: |
+          VERSION=$(jq -r '.version' plugin/package.json)
+          export VERSION
+          BRANCH="pre-release/v$VERSION"
+          git checkout -b $BRANCH
+          git add plugin/*
+          git commit -m "Prepare pre-release v$VERSION [skip ci]"
+          git push origin $BRANCH --force
+
+      - name: Create PR to main
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Prepare pre-release v${{ env.VERSION }} [skip ci]"
+          branch: pre-release/v${{ env.VERSION }}
+          base: main
+          title: "Pre-release v${{ env.VERSION }}"
+          body: "Automated pre-release generated from workflow run."
+          draft: false
+
+      - name: Create GitHub pre-release
+        id: github_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: v${{ env.VERSION }}-rc
+          release_name: "Pre-release v${{ env.VERSION }}-rc"
+          draft: false
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload VSIX to GitHub pre-release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: plugin/*.vsix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install VSCE
+        run: npm install -g @vscode/vsce
+
+      - name: Publish pre-release to VSCode Marketplace
+        working-directory: plugin
+        run: npx vsce publish --pre-release
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

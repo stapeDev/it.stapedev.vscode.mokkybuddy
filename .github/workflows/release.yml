@@ -1,0 +1,34 @@
+name: Release MokkyBuddy Plugin
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  download-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download plugin artifact from pre-release build
+        uses: actions/download-artifact@v4
+        with:
+          name: mokkybuddy-plugin
+          path: plugin
+
+  release-plugin:
+    runs-on: ubuntu-latest
+    needs: download-artifact
+    steps:
+      - name: Get plugin version
+        run: |
+          VERSION=$(jq -r '.version' plugin/package.json)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Install VSCE
+        run: npm install -g @vscode/vsce
+
+      - name: Publish VSCode Plugin
+        working-directory: plugin
+        run: npx vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
