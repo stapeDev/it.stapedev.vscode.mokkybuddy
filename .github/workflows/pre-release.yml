@@ -89,13 +89,21 @@ jobs:
           JAVA_VERSION=${{ steps.get_java_version.outputs.java_version_clean }}
           CURRENT_VERSION=$(jq -r '.version' package.json)
 
-          # Controllo se la versione esiste già sul marketplace
+          # Funzione per confronto semantico
+          semver_gt() {
+            [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+          }
+
           EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
+
           if npx vsce show $EXTENSION_ID@$JAVA_VERSION > /dev/null 2>&1; then
             echo "Version $JAVA_VERSION already published, bumping patch"
             npm version patch --no-git-tag-version
+          elif semver_gt "$CURRENT_VERSION" "$JAVA_VERSION"; then
+            echo "Current plugin version ($CURRENT_VERSION) è più nuova di Java app ($JAVA_VERSION), incrementiamo patch"
+            npm version patch --no-git-tag-version
           else
-            echo "Using Java version $JAVA_VERSION"
+            echo "Aggiorniamo plugin alla versione Java app ($JAVA_VERSION)"
             npm version $JAVA_VERSION --no-git-tag-version
           fi
 
