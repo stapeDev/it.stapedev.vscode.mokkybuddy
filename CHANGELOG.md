@@ -1,3 +1,8 @@
+## Version 1.0.72 (2025-08-26)
+## Version 1.0.71 (2025-08-26)
+## Version 1.0.70 (2025-08-23)
+## Version 1.0.69 (2025-08-23)
+## Version 1.0.68 (2025-08-23)
 ## Version 1.0.67 (2025-08-23)
 ## 1.0.30 - 2025-08-21
 - Updated plugin to match Java App version 1.0.30
