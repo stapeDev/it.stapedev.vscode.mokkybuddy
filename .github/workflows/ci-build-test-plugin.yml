@@ -3,8 +3,12 @@ name: Build & Test MokkyBuddy VSCode Plugin (Dependabot)
 on:
   pull_request:
     branches: ["main"]
-    # Questo trigger fa partire la workflow solo sulle PR verso main, incluse quelle di Dependabot
-
+  push:
+    branches:
+      - 'dependabot/**'
+      - 'features/**'
+      - 'feature/**'
+      
 jobs:
   build-plugin:
     runs-on: ubuntu-latest
