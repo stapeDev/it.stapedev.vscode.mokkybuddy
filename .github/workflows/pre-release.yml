@@ -133,46 +133,7 @@ jobs:
           rm -f "$TMP"
 
       # --- Commit su branch pre-release ---
-      - name: Commit version & docs updates
-        working-directory: plugin
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar README.md CHANGELOG.md FEATURES.md || true
-
-          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-          if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version, docs, resources [skip ci]" || echo "commit failed"
-            git push origin "$CURRENT_BRANCH" --force
-          fi
-
-      - name: Create pre-release branch
-        run: |
-          VERSION=$(jq -r '.version' plugin/package.json)
-          git checkout -B pre-release/$VERSION
-          git push origin pre-release/$VERSION --force
-
-      # --- Crea tag pre-release ---
-      - name: Create pre-release tag
-        working-directory: plugin
-        run: |
-          VERSION=$(jq -r '.version' package.json)
-          git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
-          git push origin v$VERSION-pre --force
-
-      # --- Build VSIX ---
-      - name: Build VSCode Plugin (.vsix)
-        working-directory: plugin
-        run: npx vsce package
-
-      # --- Pubblica pre-release su VSCE ---
-      - name: Publish VSCode Plugin as pre-release
-        working-directory: plugin
-        run: npx @vscode/vsce publish --pre-release
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
+      # Step per gestire pre-release e aggiornare branch corrente
       - name: Checkout plugin repo for PR
         uses: actions/checkout@v3
         with:
@@ -180,12 +141,50 @@ jobs:
           path: plugin-repo
           fetch-depth: 0
 
+      - name: Copy plugin files to repo
+        run: |
+          cp -R plugin/* plugin-repo/
+
+      - name: Commit updates on current branch
+        working-directory: plugin-repo
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Update plugin version, docs, resources [skip ci]" || echo "No changes to commit"
+            git push origin "$CURRENT_BRANCH" --force
+          fi
+
+      - name: Create/update pre-release branch
+        working-directory: plugin-repo
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          git checkout -B pre-release/$VERSION
+          git add -A
+          git commit -m "Prepare pre-release $VERSION [skip ci]" || echo "No changes to commit"
+          git push origin pre-release/$VERSION --force
+
+      - name: Create pre-release tag
+        working-directory: plugin-repo
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
+          git push origin v$VERSION-pre --force
+
+      - name: Publish VSCode Plugin as pre-release
+        working-directory: plugin
+        run: npx @vscode/vsce publish --pre-release
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
       - name: Create PR to main
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          head: pre-release/${{ steps.get_version.outputs.version }}
-          title: "Pre-release ${{ steps.get_version.outputs.version }}"
+          head: pre-release/${{ steps.get_java_version_clean.outputs.java_version_clean }}
+          title: "Pre-release ${{ steps.get_java_version_clean.outputs.java_version_clean }}"
           body: "This is an automated pre-release PR."
           path: plugin-repo
