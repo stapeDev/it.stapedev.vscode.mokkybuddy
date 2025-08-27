@@ -41,11 +41,18 @@ jobs:
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
-      - name: Download JAR artifact from Java App release
+      - name: Debug list plugin folder (confirm package.json exists)
+        run: |
+          echo "Listing plugin directory"
+          ls -la plugin || true
+          echo "If package.json is missing, the job will fail on the next step."
+
+      - name: Download JAR from Java App Release
         run: |
           VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
+          echo "Downloading mokkyBuddyAPI-${VERSION}.jar"
           curl -L -o plugin/resources/mokkyBuddyAPI.jar \
-            https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
+            "https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar"
 
       - name: Install dependencies
         working-directory: plugin
@@ -55,48 +62,96 @@ jobs:
         working-directory: plugin
         run: npm test
 
-      - name: Update plugin version and package files
+      - name: Ensure jq available (debug)
+        run: |
+          echo "jq version:"
+          jq --version
+
+      - name: Get current plugin version (from package.json)
+        id: get_plugin_version
+        working-directory: plugin
+        run: |
+          if [ ! -f package.json ]; then
+            echo "package.json not found in plugin/ — failing early"
+            ls -la
+            exit 1
+          fi
+          PLUGIN_VERSION=$(jq -r '.version' package.json)
+          echo "plugin_version=$PLUGIN_VERSION" >> $GITHUB_OUTPUT
+          echo "Found plugin version: $PLUGIN_VERSION"
+
+      - name: Update plugin version to Java app version
         working-directory: plugin
         run: |
           JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
+          echo "Setting plugin version to $JAVA_VERSION"
+          # If you prefer to bump patch when equals, replace the line below with conditional logic.
           npm version $JAVA_VERSION --no-git-tag-version
-          jq --arg v "$JAVA_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
-          mv vss-extension.tmp.json vss-extension.json
 
-      - name: Update README, CHANGELOG, FEATURES
+          # Update vss-extension.json too
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$JAVA_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
+          fi
+
+      - name: Update README and generate CHANGELOG / FEATURES
         working-directory: plugin
         run: |
           VERSION=$(jq -r '.version' package.json)
-          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
+          echo "Updating README badges to version $VERSION"
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
 
-          # Generazione CHANGELOG e FEATURES dalla repo Java
+          echo "Generating changelog/feature snippets from Java app"
           cd ../app
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          RANGE=${LAST_TAG:-HEAD}..HEAD
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="$LAST_TAG..HEAD"
+          fi
+
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
           FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
           CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse)
           BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse)
+
           cd ../plugin
 
-          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> CHANGELOG.md
-          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> CHANGELOG.md
-          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> CHANGELOG.md
-          [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> CHANGELOG.md
-          [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> CHANGELOG.md
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+          fi
 
-      - name: Commit version and docs updates
+          TMP=$(mktemp)
+          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> "$TMP"
+          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> "$TMP"
+          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
+          [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
+          [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> "$TMP"
+
+          cat "$TMP" CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
+
+          if [ ! -f FEATURES.md ]; then
+            echo "# Features" > FEATURES.md
+          fi
+          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
+          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
+
+      - name: Commit version & docs updates (if any)
         working-directory: plugin
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git add -A
+          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar README.md CHANGELOG.md FEATURES.md || true
           if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version, docs, resources [skip ci]"
+            git commit -m "Update plugin version, docs, resources [skip ci]" || echo "commit failed"
             git push origin main --force-with-lease
+          else
+            echo "No changes to commit"
           fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build VSCode Plugin
+      - name: Build VSCode Plugin (.vsix)
         working-directory: plugin
         run: npx vsce package
 
