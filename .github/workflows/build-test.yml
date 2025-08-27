@@ -50,7 +50,9 @@ jobs:
       - name: Debug - list workspace
         run: |
           echo "Workspace: $GITHUB_WORKSPACE"
-          ls -R
+          ls -la
+          echo "Listing plugin folder (if exists):"
+          ls -la plugin || true
 
       # -------------------------------
       # Get Java App version
@@ -69,11 +71,14 @@ jobs:
         id: set_final_version
         working-directory: plugin
         run: |
+          set -euo pipefail
           JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
+          echo "JAVA_VERSION=$JAVA_VERSION"
+
           CURRENT_VERSION=$(jq -r '.version' package.json)
+          echo "CURRENT_VERSION=$CURRENT_VERSION"
 
           EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$JAVA_VERSION --json || echo "{}")
-
           if [[ $EXISTS != "{}" ]]; then
             echo "Version $JAVA_VERSION exists on Marketplace, bumping patch"
             FINAL_VERSION=$(npm version patch --no-git-tag-version)
@@ -93,14 +98,27 @@ jobs:
       - name: Download JAR
         working-directory: plugin
         run: |
+          set -euo pipefail
           VERSION=${{ steps.set_final_version.outputs.final_plugin_version }}
           echo "Downloading JAR for version $VERSION"
+
+          if [ -z "$VERSION" ]; then
+            echo "Error: VERSION is empty"
+            exit 1
+          fi
+
           mkdir -p resources
-          curl -L -o resources/mokkyBuddyAPI.jar \
-            https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
+          curl -fL -o resources/mokkyBuddyAPI.jar \
+            "https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar"
+
+          if [ ! -f resources/mokkyBuddyAPI.jar ]; then
+            echo "Error: JAR not downloaded"
+            ls -la resources || true
+            exit 1
+          fi
 
       # -------------------------------
-      # Commit version bump and JAR
+      # Commit version bump and JAR (robust push)
       # -------------------------------
       - name: Commit version bump and JAR
         working-directory: plugin
@@ -110,16 +128,17 @@ jobs:
           set -euo pipefail
 
           # debug
-          echo "GITHUB_REF=$GITHUB_REF"
-          echo "GITHUB_HEAD_REF='$GITHUB_HEAD_REF'"
+          echo "GITHUB_REF=${GITHUB_REF:-}"
+          echo "GITHUB_HEAD_REF='${GITHUB_HEAD_REF:-}'"
 
-          # Calcola il nome completo del branch (PR -> GITHUB_HEAD_REF, push -> refs/heads/<branch>)
+          # compute branch name (prefer PR head, otherwise strip refs/heads/)
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-          echo "Target branch: '$BRANCH'"
+          echo "Target branch: '${BRANCH}'"
 
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+          # stage only the intended files
           git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
 
           if git diff --cached --quiet; then
@@ -127,12 +146,25 @@ jobs:
             exit 0
           fi
 
+          # preview staged changes
+          echo "Staged changes (name/status):"
+          git --no-pager diff --cached --name-status | sed -n '1,200p'
+
+          # safety: count staged deletions and abort if too many
+          DELETIONS=$(git diff --cached --name-status | awk '$1=="D"{count++} END{print (count+0)}')
+          echo "Staged deletions: $DELETIONS"
+          MAX_DEL=500
+          if [ "$DELETIONS" -gt "$MAX_DEL" ]; then
+            echo "Abort: staged deletions ($DELETIONS) exceed threshold ($MAX_DEL)."
+            git --no-pager diff --cached --name-status | sed -n '1,200p'
+            exit 1
+          fi
+
           git commit -m "Update plugin version and JAR [skip ci]"
 
-          # Se il branch esiste sul remoto, rebase per evitare divergenze
+          # if remote branch exists, fetch it and rebase to avoid unnecessary force
           if git ls-remote --exit-code origin "refs/heads/${BRANCH}"; then
-            echo "Remote branch origin/${BRANCH} exists — will fetch & rebase"
-            # fetch remote branch into origin/${BRANCH}
+            echo "Remote branch origin/${BRANCH} exists — fetching & rebasing"
             git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
             git rebase "origin/${BRANCH}" || {
               echo "Rebase failed — aborting rebase and exiting with error"
@@ -143,28 +175,31 @@ jobs:
             echo "Remote branch origin/${BRANCH} does NOT exist — will push and create it"
           fi
 
-          # Push using HEAD:<branch> to ensure we push to the correct remote ref (creates branch if needed)
+          # push using HEAD:<branch> to ensure correct remote ref; create if needed
           git push origin "HEAD:${BRANCH}" --force-with-lease
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # -------------------------------
-      # Generate docs
+      # Generate docs (commit & push to same branch)
       # -------------------------------
       - name: Generate CHANGELOG and FEATURES
         working-directory: plugin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
+
           VERSION=$(jq -r '.version' package.json)
+          echo "Generating docs for version $VERSION"
 
           # Update README badge
-          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
 
           # Generate CHANGELOG from Java repo
           cd ../app
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           RANGE="${LAST_TAG}..HEAD"
-          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
-          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
+          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
+          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
 
           cd ../plugin
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> CHANGELOG.md
@@ -175,29 +210,44 @@ jobs:
           [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
 
           git add README.md CHANGELOG.md FEATURES.md
-          if ! git diff --cached --quiet; then
-            git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
 
-            CURRENT_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF##*/}}
-            if git ls-remote --exit-code origin $CURRENT_BRANCH; then
-              git fetch origin $CURRENT_BRANCH
-              git rebase origin/$CURRENT_BRANCH
-            fi
-
-            git push origin HEAD:$GITHUB_HEAD_REF --force-with-lease
-
-          else
-            echo "No changes to commit"
+          if git diff --cached --quiet; then
+            echo "No doc changes to commit"
+            exit 0
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          echo "Staged doc changes:"
+          git --no-pager diff --cached --name-status | sed -n '1,200p'
+
+          # safety: count staged deletions in docs (lower threshold)
+          DELETIONS=$(git diff --cached --name-status | awk '$1=="D"{count++} END{print (count+0)}')
+          echo "Staged deletions in docs: $DELETIONS"
+          MAX_DEL_DOCS=200
+          if [ "$DELETIONS" -gt "$MAX_DEL_DOCS" ]; then
+            echo "Abort: staged doc deletions ($DELETIONS) exceed threshold ($MAX_DEL_DOCS)."
+            git --no-pager diff --cached --name-status | sed -n '1,200p'
+            exit 1
+          fi
+
+          git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
+
+          # calculate branch (PR vs push)
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          echo "Pushing docs to branch: '${BRANCH}'"
+
+          if git ls-remote --exit-code origin "refs/heads/${BRANCH}"; then
+            git fetch origin "refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
+            git rebase "origin/${BRANCH}"
+          fi
+
+          git push origin "HEAD:${BRANCH}" --force-with-lease
 
       # -------------------------------
       # Install dependencies & run tests
       # -------------------------------
       - name: Install dependencies
         working-directory: plugin
-        run: npm install
+        run: npm ci
 
       - name: Run tests
         working-directory: plugin
