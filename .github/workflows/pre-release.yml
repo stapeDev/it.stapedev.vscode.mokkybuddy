@@ -132,6 +132,13 @@ jobs:
           mv CHANGELOG.new CHANGELOG.md
           rm -f "$TMP"
 
+      # --- Imposta VERSION come output ---
+      - name: Set VERSION output
+        id: set_version
+        run: |
+          VERSION=$(jq -r '.version' plugin/package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       # --- Commit su branch pre-release ---
       # Step per gestire pre-release e aggiornare branch corrente
       - name: Checkout plugin repo for PR
@@ -179,12 +186,13 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+      # --- Crea PR verso main dal branch pre-release ---
       - name: Create PR to main
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          branch: pre-release/$VERSION
-          title: "Pre-release $VERSION"
+          branch: pre-release/${{ steps.set_version.outputs.version }}
+          title: "Pre-release ${{ steps.set_version.outputs.version }}"
           body: "This is an automated pre-release PR."
           path: plugin-repo
