@@ -22,6 +22,7 @@ jobs:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin
+          fetch-depth: 0
 
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
