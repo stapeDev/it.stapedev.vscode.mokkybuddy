@@ -13,7 +13,9 @@ jobs:
   build-and-commit:
     runs-on: ubuntu-latest
     steps:
+      # -------------------------------
       # Checkout Plugin Repo
+      # -------------------------------
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
@@ -23,7 +25,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      # -------------------------------
       # Checkout Java App Repo
+      # -------------------------------
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
         with:
@@ -32,19 +36,25 @@ jobs:
           token: ${{ secrets.JAVA_APP_PATH_DEPENDANT_BOT }}
           path: app
 
-      # Set up Node.js
+      # -------------------------------
+      # Setup Node.js
+      # -------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
+      # -------------------------------
       # Debug - check folder structure
+      # -------------------------------
       - name: Debug - list workspace
         run: |
           echo "Workspace: $GITHUB_WORKSPACE"
           ls -R
 
+      # -------------------------------
       # Get Java App version
+      # -------------------------------
       - name: Get Java App version
         id: get_java_version_clean
         run: |
@@ -52,7 +62,9 @@ jobs:
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
-      # Check Marketplace & set final plugin version
+      # -------------------------------
+      # Check Marketplace & set plugin version
+      # -------------------------------
       - name: Set final plugin version
         id: set_final_version
         working-directory: plugin
@@ -63,7 +75,7 @@ jobs:
           EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$JAVA_VERSION --json || echo "{}")
 
           if [[ $EXISTS != "{}" ]]; then
-            echo "Version $JAVA_VERSION already exists on Marketplace, bumping patch"
+            echo "Version $JAVA_VERSION exists on Marketplace, bumping patch"
             FINAL_VERSION=$(npm version patch --no-git-tag-version)
           else
             npm version $JAVA_VERSION --no-git-tag-version
@@ -75,8 +87,10 @@ jobs:
 
           echo "final_plugin_version=$FINAL_VERSION" >> $GITHUB_OUTPUT
 
-      # Download JAR
-      - name: Download JAR from Java App release
+      # -------------------------------
+      # Download JAR from Java App release
+      # -------------------------------
+      - name: Download JAR
         working-directory: plugin
         run: |
           VERSION=${{ steps.set_final_version.outputs.final_plugin_version }}
@@ -85,7 +99,9 @@ jobs:
           curl -L -o resources/mokkyBuddyAPI.jar \
             https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
 
+      # -------------------------------
       # Commit version bump and JAR
+      # -------------------------------
       - name: Commit version bump and JAR
         working-directory: plugin
         run: |
@@ -95,9 +111,15 @@ jobs:
           git add package.json vss-extension.json resources/mokkyBuddyAPI.jar
           if ! git diff --cached --quiet; then
             git commit -m "Update plugin version and JAR [skip ci]"
+
             CURRENT_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF##*/}}
-            git fetch origin $CURRENT_BRANCH
-            git rebase origin/$CURRENT_BRANCH
+
+            # Push safely: se branch esiste su remoto, rebase
+            if git ls-remote --exit-code origin $CURRENT_BRANCH; then
+              git fetch origin $CURRENT_BRANCH
+              git rebase origin/$CURRENT_BRANCH
+            fi
+
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
@@ -105,14 +127,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Update docs
+      # -------------------------------
+      # Generate docs
+      # -------------------------------
       - name: Generate CHANGELOG and FEATURES
         working-directory: plugin
         run: |
           VERSION=$(jq -r '.version' package.json)
 
+          # Update README badge
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
 
+          # Generate CHANGELOG from Java repo
           cd ../app
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           RANGE="${LAST_TAG}..HEAD"
@@ -130,9 +156,13 @@ jobs:
           git add README.md CHANGELOG.md FEATURES.md
           if ! git diff --cached --quiet; then
             git commit -m "Update README, CHANGELOG, FEATURES [skip ci]"
+
             CURRENT_BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF##*/}}
-            git fetch origin $CURRENT_BRANCH
-            git rebase origin/$CURRENT_BRANCH
+            if git ls-remote --exit-code origin $CURRENT_BRANCH; then
+              git fetch origin $CURRENT_BRANCH
+              git rebase origin/$CURRENT_BRANCH
+            fi
+
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
@@ -140,7 +170,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Install dependencies and run tests
+      # -------------------------------
+      # Install dependencies & run tests
+      # -------------------------------
       - name: Install dependencies
         working-directory: plugin
         run: npm install
@@ -149,7 +181,9 @@ jobs:
         working-directory: plugin
         run: npm test
 
-      # Build plugin
+      # -------------------------------
+      # Build VSCode Plugin
+      # -------------------------------
       - name: Build VSCode Plugin
         working-directory: plugin
         run: npx vsce package
