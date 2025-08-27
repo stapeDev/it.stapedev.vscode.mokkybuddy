@@ -21,7 +21,6 @@ jobs:
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
-          path: plugin
 
       - name: Checkout Java App Repo
         uses: actions/checkout@v3
@@ -36,6 +35,11 @@ jobs:
         with:
           node-version: 20
 
+      - name: Debug - check folder structure
+        run: |
+          echo "Workspace: $GITHUB_WORKSPACE"
+          ls -R
+
       - name: Get Java App version
         id: get_java_version_clean
         run: |
@@ -45,14 +49,12 @@ jobs:
 
       - name: Check Marketplace & set final plugin version
         id: set_final_version
-        working-directory: plugin
         run: |
           JAVA_VERSION=${{ steps.get_java_version_clean.outputs.java_version_clean }}
           CURRENT_VERSION=$(jq -r '.version' package.json)
 
-          # Controllo sul Marketplace
           EXISTS=$(npx vsce show StapeDev.mokky-buddy-api-runner@$JAVA_VERSION --json || echo "{}")
-          
+
           if [[ $EXISTS != "{}" ]]; then
             echo "Version $JAVA_VERSION already exists on Marketplace, bumping patch"
             FINAL_VERSION=$(npm version patch --no-git-tag-version)
@@ -61,7 +63,6 @@ jobs:
             FINAL_VERSION=$JAVA_VERSION
           fi
 
-          # Aggiorna vss-extension.json
           jq --arg v "$FINAL_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
           mv vss-extension.tmp.json vss-extension.json
 
@@ -71,9 +72,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: checkout-repos
     steps:
-      - name: Debug plugin folder
-        run: ls -R plugin
-
       - name: Download JAR from Java App release
         run: |
           VERSION=${{ needs.checkout-repos.outputs.final_plugin_version }}
@@ -84,26 +82,16 @@ jobs:
             exit 1
           fi
 
-          mkdir -p plugin/resources
-          curl -L -o plugin/resources/mokkyBuddyAPI.jar \
+          mkdir -p resources
+          curl -L -o resources/mokkyBuddyAPI.jar \
             https://github.com/stapeDev/it.stapedev.api.mokkybuddy/releases/download/v${VERSION}/mokkyBuddyAPI-${VERSION}.jar
-
-      - name: Verify JAR download
-        run: |
-          if [ ! -f plugin/resources/mokkyBuddyAPI.jar ]; then
-            echo "Error: JAR not found after download"
-            exit 1
-          fi
 
   commit-plugin-version:
     runs-on: ubuntu-latest
     needs: prepare-java-jar
     steps:
       - name: Commit version bump and JAR
-        working-directory: plugin
         run: |
-          echo "Current folder: $(pwd)"
-          git status
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
@@ -116,27 +104,26 @@ jobs:
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   update-docs:
     runs-on: ubuntu-latest
     needs: commit-plugin-version
     steps:
       - name: Generate CHANGELOG and FEATURES
-        working-directory: plugin
         run: |
           VERSION=$(jq -r '.version' package.json)
 
-          # Update README badge
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md
 
-          # Generate CHANGELOG from Java repo
-          cd ../app
+          cd app
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           RANGE="${LAST_TAG}..HEAD"
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
           FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
 
-          cd ../plugin
+          cd ..
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> CHANGELOG.md
           [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> CHANGELOG.md
           [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> CHANGELOG.md
@@ -144,7 +131,6 @@ jobs:
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
           [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
 
-          # Commit docs
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add README.md CHANGELOG.md FEATURES.md
@@ -156,17 +142,17 @@ jobs:
             git push origin $CURRENT_BRANCH --force-with-lease
           else
             echo "No changes to commit"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   test-plugin:
     runs-on: ubuntu-latest
     needs: update-docs
     steps:
       - name: Install dependencies
-        working-directory: plugin
         run: npm install
 
       - name: Run tests
-        working-directory: plugin
         run: npm test
 
   build-plugin:
@@ -174,11 +160,10 @@ jobs:
     needs: test-plugin
     steps:
       - name: Build VSCode Plugin
-        working-directory: plugin
         run: npx vsce package
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
         with:
           name: mokkybuddy-plugin
-          path: plugin/*.vsix
+          path: *.vsix
