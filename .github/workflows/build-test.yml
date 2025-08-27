@@ -114,7 +114,7 @@ jobs:
 
           cd ../app
 
-          # Assicuriamoci di avere i tag
+          # Assicuriamoci di avere i tag e la history completa
           git fetch --tags --prune || true
 
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
@@ -125,32 +125,56 @@ jobs:
           fi
           echo "Using git range: '$RANGE' (LAST_TAG='$LAST_TAG')"
 
-          # Use `|| true` to avoid non-zero exit when there are no matches
+          # raccogliamo i log, ma non falliamo se non ci sono risultati
           FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
-          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
+          FIXES=$(git log $RANGE --grep '^fix'  --pretty=format:"- %s (%an)" --reverse || true)
           CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse || true)
           BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse || true)
 
           cd ../plugin
 
+          # Assicuriamoci che CHANGELOG.md esista (touch evita cat fallito)
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
           fi
 
           TMP=$(mktemp)
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> "$TMP"
-          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> "$TMP"
-          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
-          [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
-          [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> "$TMP"
 
-          cat "$TMP" CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
+          if [ -n "$FEATS" ]; then
+            echo -e "\n### Features" >> "$TMP"
+            echo "$FEATS" >> "$TMP"
+          fi
 
+          if [ -n "$FIXES" ]; then
+            echo -e "\n### Fixes" >> "$TMP"
+            echo "$FIXES" >> "$TMP"
+          fi
+
+          if [ -n "$CHORES" ]; then
+            echo -e "\n### Chores" >> "$TMP"
+            echo "$CHORES" >> "$TMP"
+          fi
+
+          if [ -n "$BREAKING" ]; then
+            echo -e "\n### BREAKING CHANGES" >> "$TMP"
+            echo "$BREAKING" >> "$TMP"
+          fi
+
+          # Unisco in modo sicuro: CHANGELOG.md esiste già
+          cat "$TMP" CHANGELOG.md > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+          rm -f "$TMP"
+
+          # FEATURES.md (stessa logica, ma più semplice)
           if [ ! -f FEATURES.md ]; then
             echo "# Features" > FEATURES.md
           fi
+
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> FEATURES.md
-          [ -n "$FEATS" ] && echo "$FEATS" >> FEATURES.md
+          if [ -n "$FEATS" ]; then
+            echo "$FEATS" >> FEATURES.md
+          fi
 
       - name: Commit version & docs updates (if any)
         working-directory: plugin
