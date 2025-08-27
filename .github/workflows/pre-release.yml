@@ -7,8 +7,13 @@ on:
 jobs:
   pre-release:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: Set branch from payload
+        id: get_branch
+        run: |
+          echo "Branch to use: ${{ github.event.client_payload.ref }}"
+          echo "branch=${{ github.event.client_payload.ref }}" >> $GITHUB_OUTPUT
+
       - name: Download plugin artifact from build
         uses: actions/download-artifact@v4
         with:
@@ -20,6 +25,7 @@ jobs:
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ steps.get_branch.outputs.branch }}
           path: plugin-repo
 
       - name: Create pre-release branch
@@ -51,6 +57,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          head: pre-release/${{ steps.pre_release.outputs.version }}
-          title: "Pre-release ${{ steps.pre_release.outputs.version }}"
+          head: pre-release/${{ steps.get_branch.outputs.branch }}
+          title: "Pre-release ${{ steps.get_branch.outputs.branch }}"
           body: "This is an automated pre-release PR."

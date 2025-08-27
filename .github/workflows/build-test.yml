@@ -215,4 +215,4 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/stapeDev/it.stapedev.vscode.mokkybuddy/actions/workflows/pre-release.yml/dispatches \
-            -d "{\"ref\":\"${{ github.ref_name }}\"}"
+            -d "{\"event_type\":\"trigger-pre-release\",\"client_payload\":{\"ref\":\"${{ github.ref_name }}\"}}"
