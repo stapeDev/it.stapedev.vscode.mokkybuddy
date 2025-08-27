@@ -27,6 +27,7 @@ jobs:
           ref: main
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
+          fetch-depth: 0        # <--- importante: prende tutta la history e i tag
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -94,44 +95,57 @@ jobs:
           fi
 
       - name: Update README and generate CHANGELOG / FEATURES
+        working-directory: plugin
         run: |
-          PLUGIN_DIR="$GITHUB_WORKSPACE/plugin"
-          JAVA_APP_DIR="$GITHUB_WORKSPACE/app"
-          
-          VERSION=$(jq -r '.version' "$PLUGIN_DIR/package.json")
+          set -euo pipefail
+          set -x
+
+          VERSION=$(jq -r '.version' package.json)
           echo "Updating README badges to version $VERSION"
-          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" "$PLUGIN_DIR/README.md" || true
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
 
           echo "Generating changelog/feature snippets from Java app"
-          cd "$JAVA_APP_DIR"
+          # Assicuriamoci di trovarci nella cartella corretta
+          if [ ! -d ../app ]; then
+            echo "ERROR: ../app directory not found. Listing workspace:"
+            ls -la
+            exit 1
+          fi
+
+          cd ../app
+
+          # Assicuriamoci di avere i tag
+          git fetch --tags --prune || true
+
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
             RANGE="HEAD"
           else
             RANGE="$LAST_TAG..HEAD"
           fi
+          echo "Using git range: '$RANGE' (LAST_TAG='$LAST_TAG')"
 
-          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse)
-          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse)
-          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse)
-          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse)
+          # Use `|| true` to avoid non-zero exit when there are no matches
+          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
+          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
+          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse || true)
+          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse || true)
 
-          # Torniamo nella directory plugin per scrivere i file
-          cd "$PLUGIN_DIR"
+          cd ../plugin
 
-          # CHANGELOG.md
           if [ ! -f CHANGELOG.md ]; then
             echo "# Changelog" > CHANGELOG.md
           fi
+
           TMP=$(mktemp)
           echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> "$TMP"
           [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> "$TMP"
           [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
           [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
           [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> "$TMP"
+
           cat "$TMP" CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
 
-          # FEATURES.md
           if [ ! -f FEATURES.md ]; then
             echo "# Features" > FEATURES.md
           fi
