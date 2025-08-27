@@ -165,20 +165,19 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      - name: Checkout plugin repository for PR
+      - name: Checkout plugin repo for PR
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin-repo
           fetch-depth: 0
-          
-      # --- Crea PR verso main ---
+
       - name: Create PR to main
         uses: peter-evans/create-pull-request@v5
-        working-directory: plugin-repo
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          head: pre-release/${{ github.event.workflow_run.head_branch }}
-          title: "Pre-release ${{ github.event.workflow_run.head_branch }}"
+          head: pre-release/${{ steps.get_version.outputs.version }}
+          title: "Pre-release ${{ steps.get_version.outputs.version }}"
           body: "This is an automated pre-release PR."
+          path: plugin-repo
