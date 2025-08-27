@@ -145,7 +145,6 @@ jobs:
 
           # Push using HEAD:<branch> to ensure we push to the correct remote ref (creates branch if needed)
           git push origin "HEAD:${BRANCH}" --force-with-lease
-
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
