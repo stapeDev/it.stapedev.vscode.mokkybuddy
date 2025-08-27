@@ -356,9 +356,16 @@ export function activate(context: vscode.ExtensionContext) {
                 } catch (e: any) { log(`❌ Errore delete API: ${e?.message ?? e}`); return; }
             }
             server.apiList = server.apiList.filter(a => a !== api);
+            // Scrivi il config attivo (TEMP_CONFIG) -- in modo che loadApisForServer lo trovi subito
             writeActiveConfig(server);
-            persistUiConfig();
+        
+            // Aggiorna il tree (mostra il conteggio aggiornato)
             serverProvider.refresh();
+        
+            // Se il server è in esecuzione, riavvialo per caricare il nuovo TEMP_CONFIG
+            if (getCurrentApiMode() === 'file' && server.running) {
+                await restartServer(server);
+            }
         }),
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.addAPI', async (server: ServerDef) => {
             const methodPick = await vscode.window.showQuickPick(['GET','POST','PUT','DELETE'], { placeHolder: 'HTTP Method' });
