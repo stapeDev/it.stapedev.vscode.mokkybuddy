@@ -133,17 +133,25 @@ jobs:
           rm -f "$TMP"
 
       # --- Commit su branch pre-release ---
-      - name: Commit pre-release branch
+      - name: Commit version & docs updates
         working-directory: plugin
         run: |
-          VERSION=$(jq -r '.version' package.json)
-          BRANCH="pre-release/$VERSION"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          git checkout -b $BRANCH || git checkout $BRANCH
-          git add -A
-          git commit -m "Prepare pre-release $VERSION [skip ci]" || echo "No changes to commit"
-          git push origin $BRANCH --force
+          git add package.json vss-extension.json resources/mokkyBuddyAPI.jar README.md CHANGELOG.md FEATURES.md || true
+
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+
+          if ! git diff --cached --quiet; then
+            git commit -m "Update plugin version, docs, resources [skip ci]" || echo "commit failed"
+            git push origin "$CURRENT_BRANCH" --force
+          fi
+
+      - name: Create pre-release branch
+        run: |
+          VERSION=$(jq -r '.version' plugin/package.json)
+          git checkout -B pre-release/$VERSION
+          git push origin pre-release/$VERSION --force
 
       # --- Crea tag pre-release ---
       - name: Create pre-release tag
