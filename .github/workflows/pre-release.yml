@@ -190,6 +190,6 @@ jobs:
           branch: pre-release/${{ steps.set_version.outputs.version }}  # il branch sorgente
           title: "Pre-release ${{ steps.set_version.outputs.version }}"
           body: "This is an automated pre-release PR from the pre-release branch to main."
-          path: plugin-repo
+          path: plugin
           draft: false
           delete-branch: false
