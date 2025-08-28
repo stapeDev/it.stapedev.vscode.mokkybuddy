@@ -68,7 +68,7 @@ jobs:
 
           echo "Downloading JAR for version v$VERSION"
           RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
-            -H "Accept: application/vnd.github.v3+json" \
+            -H "Accept: application/vnd.github.com/v3+json" \
             "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" \
             | jq -r '.id')
           
@@ -102,10 +102,10 @@ jobs:
         working-directory: plugin
         run: npm test
 
-      # --- Calcola e aggiorna versione di pre-release ---
-      - name: Calculate and update pre-release version
+      # --- Aggiorna versione plugin e documentazione ---
+      - name: Update plugin version and documentation
         working-directory: plugin
-        id: update_pre_version
+        id: update_version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -133,50 +133,18 @@ jobs:
             NEW_PATCH=$((PATCH + 1))
           fi
 
-          PRE_RELEASE_VERSION="$MAJOR.$NEW_MINOR.$NEW_PATCH"
+          NEW_VERSION="$MAJOR.$NEW_MINOR.$NEW_PATCH"
 
-          if semver_gt "$JAVA_VERSION" "$PRE_RELEASE_VERSION"; then
+          if semver_gt "$JAVA_VERSION" "$NEW_VERSION"; then
             echo "Allineiamo alla versione Java App $JAVA_VERSION"
-            PRE_RELEASE_VERSION=$JAVA_VERSION
+            NEW_VERSION=$JAVA_VERSION
           else
             echo "Non ci sono differenze di versione, facciamo un bump $BUMP_TYPE"
           fi
 
-          jq ".version = \"$PRE_RELEASE_VERSION\"" package.json > temp.json && mv temp.json package.json
+          jq ".version = \"$NEW_VERSION\"" package.json > temp.json && mv temp.json package.json
           jq ".version = \"$(jq -r .version package.json)\"" vss-extension.json > temp.json && mv temp.json vss-extension.json
-
-          echo "PRE_RELEASE_VERSION=$PRE_RELEASE_VERSION" >> $GITHUB_OUTPUT
-
-      # --- Pubblicazione su Marketplace (pre-release) ---
-      - name: Publish VSCode Plugin (pre-release)
-        working-directory: plugin
-        run: |
-          npx @vscode/vsce publish --pre-release
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      # --- Aggiorna versione finale e crea PR ---
-      - name: Update final version and create PR
-        working-directory: plugin
-        id: update_final_version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Checkout sul branch corrente per evitare conflitti
-          git checkout ${{ github.ref_name }}
-          git pull origin ${{ github.ref_name }}
-
-          # Calcola la versione finale, con numero minor pari
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-          FINAL_VERSION="$MAJOR.$((MINOR + 1)).0"
-
-          # Aggiorna package.json e vss-extension.json con la versione finale
-          jq ".version = \"$FINAL_VERSION\"" package.json > temp.json && mv temp.json package.json
-          jq ".version = \"$FINAL_VERSION\"" vss-extension.json > temp.json && mv temp.json vss-extension.json
-
-          # Aggiorna il README, CHANGELOG e features
-          sed -i "s|Java App v[0-9]\+\.[0-9]\+\.[0-9]\+|Java App v${{ steps.get_java_version.outputs.java_version_clean }}|g" README.md
+          sed -i "s|Java App v[0-9]\+\.[0-9]\+\.[0-9]\+|Java App v${JAVA_VERSION}|g" README.md
           
           LAST_TAG=$(git describe --tags --abbrev=0)
           COMMITS=$(git log --pretty=format:"- %s" ${LAST_TAG}..HEAD)
@@ -187,19 +155,35 @@ jobs:
           if [ -n "$FEATURES" ]; then
             echo -e "$FEATURES\n\n$(cat features.md)" > features.md
           fi
+          
+          echo "RELEASE_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
+      
+      # --- Creazione tag, commit e push ---
+      - name: Create tag, commit, and push
+        working-directory: plugin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION=${{ steps.update_version.outputs.RELEASE_VERSION }}
+          TAG_NAME="v${NEW_VERSION}-pre"
+          BRANCH_NAME="pre-release-v$NEW_VERSION"
 
-          # Configura Git e committa le modifiche
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           
-          git add package.json vss-extension.json README.md CHANGELOG.md features.md
-          git commit -m "chore(release): Prepare v$FINAL_VERSION for main merge" || true
-          
-          BRANCH_NAME="release-v$FINAL_VERSION"
+          # Controlla se ci sono modifiche da committare
+          if [[ $(git status --porcelain) ]]; then
+            git add resources/mokkyBuddyAPI.jar package.json vss-extension.json README.md CHANGELOG.md features.md
+            git commit -m "chore(pre-release): Update to v$NEW_VERSION"
+          else
+            echo "Nessuna modifica da committare, si salta il commit."
+          fi
+
+          git tag $TAG_NAME -a -m "Pre-release tag for v$NEW_VERSION"
           git checkout -b "$BRANCH_NAME"
           git push -u origin "$BRANCH_NAME"
-
-          echo "FINAL_VERSION=$FINAL_VERSION" >> $GITHUB_OUTPUT
+          git push --tags
+          
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
       # --- Creazione Pull Request ---
@@ -207,9 +191,16 @@ jobs:
         working-directory: plugin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_NAME: ${{ steps.update_final_version.outputs.BRANCH_NAME }}
+          BRANCH_NAME: ${{ steps.create_tag_commit_push.outputs.BRANCH_NAME }}
         run: |
           gh pr create --base main --head "$BRANCH_NAME" \
-            --title "chore(release): v${{ steps.update_final_version.outputs.FINAL_VERSION }}" \
-            --body "Aggiorna il branch \`main\` per la release finale del plugin MokkyBuddy v${{ steps.update_final_version.outputs.FINAL_VERSION }}."
+            --title "chore(pre-release): v${{ steps.update_version.outputs.RELEASE_VERSION }}" \
+            --body "Aggiorna il branch \`main\` per la pre-release del plugin MokkyBuddy v${{ steps.update_version.outputs.RELEASE_VERSION }}."
 
+      # --- Pubblicazione su Marketplace (pre-release) ---
+      - name: Publish VSCode Plugin (pre-release)
+        working-directory: plugin
+        run: |
+          npx @vscode/vsce publish --pre-release
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
