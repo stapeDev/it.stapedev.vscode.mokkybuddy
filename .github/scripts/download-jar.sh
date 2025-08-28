@@ -41,3 +41,14 @@ curl -L -H "Authorization: token $JAVA_APP_PAT" \
   "$ASSET_URL" -o "$TARGET_FILE"
 
 echo "Downloaded JAR to $TARGET_FILE"
+
+cd plugin
+
+git add "$TARGET_FILE"
+
+if git diff --cached --quiet; then
+  echo "No changes in JAR to commit"
+else
+  git commit -m "Update JAR for version $JAVA_VERSION [skip ci]"
+  git push origin HEAD
+fi
