@@ -53,7 +53,9 @@ jobs:
           REPO: stapeDev/it.stapedev.vscode.mokkybuddy
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          LATEST_TAG=v${VERSION}-pre
+          # rimuovo eventuale prefisso v
+          VERSION_CLEAN=${VERSION#v}
+          LATEST_TAG=v${VERSION_CLEAN}-pre
           echo "Fetching release for tag $LATEST_TAG"
           RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases/tags/$LATEST_TAG")
@@ -65,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          FNAME=plugin-${VERSION}.zip
+          FNAME=plugin-${VERSION_CLEAN}.zip
           echo "Downloading asset $FNAME"
           curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
             "$ASSET_URL" -o "$FNAME"
