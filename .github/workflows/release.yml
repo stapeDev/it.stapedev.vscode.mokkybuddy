@@ -95,24 +95,20 @@ jobs:
       - name: Copy artifact into repo (preserve package.json)
         run: |
           # copy everything from plugin-artifact/ into plugin-repo, excluding package.json and vss-extension.json
-          # rsync preserves permissions and is available on ubuntu runners
           rsync -av --delete --exclude 'package.json' --exclude 'vss-extension.json' plugin-artifact/ plugin-repo/
-          # show a short tree for debugging
           echo "plugin-repo content after copy:"
           ls -la plugin-repo | sed -n '1,200p'
-
-          # ensure package.json in plugin-repo is intact and show versions
           echo "plugin-repo/package.json version:"
           jq -r '.version' plugin-repo/package.json || true
           echo "artifact package.json version (if present):"
           [ -f plugin-artifact/package.json ] && jq -r '.version' plugin-artifact/package.json || true
-
-          # stage changes in plugin-repo
           cd plugin-repo
           git add -A || true
 
       # --- Create release branch (based on ARTIFACT version) ---
       - name: Create release branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd plugin-repo
           # prefer artifact version, fallback to plugin-repo package.json
@@ -121,6 +117,10 @@ jobs:
             echo "No release version available!"
             exit 1
           fi
+
+          # set remote to use token for pushes
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+
           RELEASE_BRANCH=release/$RELEASE_VERSION
           if git show-ref --verify --quiet refs/heads/$RELEASE_BRANCH; then
             git checkout $RELEASE_BRANCH
@@ -135,10 +135,16 @@ jobs:
 
       # --- Create release tag (artifact version) ---
       - name: Create release tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd plugin-repo
           RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.artifact_version }}
           TAG=v$RELEASE_VERSION
+
+          # set remote to use token for pushes
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists, skip"
           else
@@ -157,7 +163,6 @@ jobs:
         run: |
           PUBLISH_VERSION=$(jq -r '.version' package.json)
           echo "Publishing version from plugin-repo/package.json: $PUBLISH_VERSION"
-          # run publish (this reads package.json for version)
           npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
