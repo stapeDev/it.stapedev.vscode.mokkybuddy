@@ -192,13 +192,12 @@ jobs:
 
       # --- Crea PR da pre-release verso main ---
       - name: Create PR to main
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          base: main
-          branch: pre-release/${{ steps.set_version.outputs.version }}
-          title: "Pre-release ${{ steps.set_version.outputs.version }}"
-          body: "This is an automated pre-release PR from the pre-release branch to main."
-          path: plugin
-          draft: false
-          delete-branch: false
+        run: |
+          VERSION=${{ steps.set_version.outputs.version }}
+          gh pr create \
+            --base main \
+            --head pre-release/$VERSION \
+            --title "Pre-release $VERSION" \
+            --body "Automated pre-release PR from pre-release/$VERSION to main."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
