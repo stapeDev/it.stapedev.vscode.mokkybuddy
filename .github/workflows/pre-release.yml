@@ -1,0 +1,141 @@
+name: Build & Pre-release MokkyBuddy VSCode Plugin
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  repository_dispatch:
+    types: [trigger-plugin-pre-release-build]
+  push:
+    branches:
+      - 'features/**'
+      - 'feature/**'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      java_version: ${{ steps.get_java.outputs.version }}
+    steps:
+      # --- Checkout plugin (repo pubblica o privata) ---
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          path: plugin
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }} # token predefinito GitHub Actions
+
+      # --- Checkout Java App (repo privata) ---
+      - name: Checkout Java App Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.api.mokkybuddy
+          ref: ${{ github.event.client_payload.branch || 'main' }}
+          path: app
+          fetch-depth: 0
+          token: ${{ secrets.JAVA_APP_PAT }} # token con permessi repo
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      # Get Java App version
+      - name: Get Java version
+        id: get_java
+        run: |
+          VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=${VERSION/-SNAPSHOT/}" >> $GITHUB_OUTPUT
+
+      # Download API JAR
+      - name: Download API JAR
+        run: |
+          chmod +x plugin/.github/scripts/download-jar.sh
+          plugin/.github/scripts/download-jar.sh ${{ steps.get_java.outputs.version }}
+        env:
+          JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
+
+      # Install & test plugin
+      - run: npm ci
+        working-directory: plugin
+      - run: npm test
+        working-directory: plugin
+
+  versioning:
+    runs-on: ubuntu-latest
+    needs: prepare
+    outputs:
+      release_version: ${{ steps.bump.outputs.release_version }}
+    steps:
+      # Checkout con path
+      - uses: actions/checkout@v3
+        with:
+          path: plugin
+          fetch-depth: 0
+      - uses: actions/checkout@v3
+        with:
+          path: app
+          fetch-depth: 0
+
+      # Bump versione plugin
+      - name: Bump version
+        id: bump
+        run: |
+          chmod +x plugin/.github/scripts/bump-version.sh
+          plugin/.github/scripts/bump-version.sh ${{ needs.prepare.outputs.java_version }}
+
+      # Aggiorna CHANGELOG e README/features
+      - name: Update changelog
+        run: |
+          chmod +x plugin/.github/scripts/update-changelog.sh
+          plugin/.github/scripts/update-changelog.sh
+
+  release:
+    runs-on: ubuntu-latest
+    needs: versioning
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          path: plugin
+          fetch-depth: 0
+
+      # Create branch/tag pre-release
+      - name: Create branch/tag/pre-release
+        run: |
+          chmod +x plugin/.github/scripts/create-prerelease.sh
+          plugin/.github/scripts/create-prerelease.sh ${{ needs.versioning.outputs.release_version }}
+
+      # Publish pre-release su Marketplace (usando versione aggiornata)
+      - name: Publish Marketplace pre-release
+        run: |
+          chmod +x plugin/.github/scripts/publish-prerelease.sh
+          plugin/.github/scripts/publish-prerelease.sh ${{ needs.versioning.outputs.release_version }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      # Post-release bump & push su branch pre-release
+      - name: Post-release bump
+        run: |
+          chmod +x plugin/.github/scripts/post-release-bump.sh
+          plugin/.github/scripts/post-release-bump.sh ${{ needs.versioning.outputs.release_version }}
+
+      # Crea PR dal branch pre-release verso main
+      - name: Create PR to main
+        run: |
+          cd plugin
+          RELEASE_VERSION=${{ needs.versioning.outputs.release_version }}
+          
+          # Controlla se esiste già una PR per questo pre-release
+          if gh pr list --base main --head pre-release/$RELEASE_VERSION --json number --jq '.[0].number' | grep -q .; then
+            echo "PR from pre-release/$RELEASE_VERSION to main already exists, skip."
+          else
+            gh pr create \
+              --base main \
+              --head pre-release/$RELEASE_VERSION \
+              --title "PR from pre-release/$RELEASE_VERSION to main" \
+              --body "Automated pre-release PR from pre-release/$RELEASE_VERSION to main"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
