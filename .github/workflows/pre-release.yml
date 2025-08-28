@@ -1,6 +1,6 @@
 name: Build & Pre-release MokkyBuddy VSCode Plugin
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 on:
@@ -12,10 +12,10 @@ on:
       - 'feature/**'
 
 jobs:
-  build-and-pre-release:
+  build_and_pre_release:
     runs-on: ubuntu-latest
     steps:
-      # --- Checkout plugin e Java App ---
+      # --- Checkout Plugin e Java App ---
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
@@ -33,13 +33,12 @@ jobs:
           path: app
           fetch-depth: 0
 
-      # --- Setup Node ---
+      # --- Setup Node e Download JAR ---
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      # --- Recupero versione Java App ---
       - name: Get Java App version
         id: get_java_version
         run: |
@@ -47,7 +46,6 @@ jobs:
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
-      # --- Download JAR (come prima) ---
       - name: Download JAR artifact from Java App release
         env:
           JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
@@ -57,27 +55,12 @@ jobs:
           TARGET_DIR=plugin/resources
           TARGET_FILE=$TARGET_DIR/mokkyBuddyAPI.jar
           mkdir -p $TARGET_DIR
+          RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" | jq -r '.id')
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then echo "Release not found!"; exit 1; fi
+          ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" | jq -r '.[] | select(.name | endswith(".jar")) | .url')
+          curl -L -H "Authorization: token $JAVA_APP_PAT" -H "Accept: application/octet-stream" "$ASSET_URL" -o "$TARGET_FILE"
 
-          RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" \
-            | jq -r '.id')
-
-          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then
-            echo "Release not found!"
-            exit 1
-          fi
-
-          ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
-            | jq -r '.[] | select(.name | endswith(".jar")) | .url')
-
-          curl -L -H "Authorization: token $JAVA_APP_PAT" \
-            -H "Accept: application/octet-stream" \
-            "$ASSET_URL" -o "$TARGET_FILE"
-
-      # --- Installa dipendenze e test ---
+      # --- Build e Test ---
       - name: Install dependencies
         working-directory: plugin
         run: npm install
@@ -86,248 +69,30 @@ jobs:
         working-directory: plugin
         run: npm test
 
-      # --- Aggiorna versione plugin basata su commit e Java App (stessa logica) ---
-      - name: Update plugin version based on commits
+      # --- Crea l'artefatto del plugin (non la release!) ---
+      - name: Package plugin artifact
         working-directory: plugin
         run: |
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          JAVA_VERSION=${{ steps.get_java_version.outputs.java_version_clean }}
-          EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
+          npx @vscode/vsce package
 
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          RANGE=${LAST_TAG:+$LAST_TAG..HEAD}
-          COMMITS=$(git log $RANGE --pretty=format:"%s%b" || true)
+      # --- Carica l'artefatto per renderlo disponibile alla pipeline di release ---
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: vsix-artifact
+          path: plugin/*.vsix
 
-          echo "Commits to analyze:"
-          echo "$COMMITS"
-
-          semver_gt() {
-            [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
-          }
-
-          if echo "$COMMITS" | grep -q 'BREAKING CHANGE'; then
-            echo "BREAKING CHANGE trovata, incremento MAJOR"
-            npm version major --no-git-tag-version
-          elif echo "$COMMITS" | grep -q '^feat'; then
-            echo "Commits feature trovati, incremento MINOR"
-            npm version minor --no-git-tag-version
-          elif echo "$COMMITS" | grep -q '^fix'; then
-            echo "Commits fix trovati, incremento PATCH"
-            npm version patch --no-git-tag-version
-          else
-            if semver_gt "$JAVA_VERSION" "$CURRENT_VERSION"; then
-              echo "Allineiamo alla versione Java App $JAVA_VERSION"
-              npm version $JAVA_VERSION --no-git-tag-version
-            else
-              echo "Incrementiamo PATCH di default"
-              npm version patch --no-git-tag-version
-            fi
-          fi
-
-          if [ -f vss-extension.json ]; then
-            jq --arg v "$(jq -r '.version' package.json)" '.version=$v' vss-extension.json > vss-extension.tmp.json
-            mv vss-extension.tmp.json vss-extension.json
-          fi
-
-      # --- Update docs (stessa logica) ---
-      - name: Update docs
-        working-directory: plugin
-        run: |
-          VERSION=$(jq -r '.version' package.json)
-          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
-
-          cd ../app
-          git fetch --tags --prune || true
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          RANGE=${LAST_TAG:+$LAST_TAG..HEAD}
-          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
-          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
-          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse || true)
-          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse || true)
-          cd ../plugin
-
-          [ ! -f CHANGELOG.md ] && echo "# Changelog" > CHANGELOG.md
-          TMP=$(mktemp)
-          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> "$TMP"
-          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> "$TMP"
-          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
-          [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
-          [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> "$TMP"
-          cat "$TMP" CHANGELOG.md > CHANGELOG.new
-          mv CHANGELOG.new CHANGELOG.md
-          rm -f "$TMP"
-
-      # --- Imposta VERSION come output (version aggiornata dal passo precedente) ---
-      - name: Set VERSION output
-        id: set_version
-        working-directory: plugin
-        run: |
-          VERSION=$(jq -r '.version' package.json)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      # --- Commit e pre-release (stessa logica) ---
-      - name: Commit updates on current branch
-        working-directory: plugin
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          CURRENT_BRANCH=${GITHUB_REF_NAME}
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version, docs, resources [skip ci]" || echo "No changes to commit"
-            git push origin "$CURRENT_BRANCH" --force
-          fi
-
-      # --- Compute release_version checking Marketplace (increment patch if exists) ---
-      - name: Compute release version
-        id: compute_release_version
-        working-directory: plugin
-        run: |
-          EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
-          CURRENT_VERSION=$(jq -r '.version' package.json)
-          echo "Current version: $CURRENT_VERSION"
-          # get existing versions from Marketplace (one per line)
-          EXISTING=$(npx @vscode/vsce show "$EXTENSION_ID" --json | jq -r '.versions[]?' || true)
-          RELEASE_VERSION="$CURRENT_VERSION"
-
-          # increment patch while it exists on marketplace
-          while echo "$EXISTING" | grep -qx "$RELEASE_VERSION"; do
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
-            PATCH=$((PATCH+1))
-            RELEASE_VERSION="$MAJOR.$MINOR.$PATCH"
-          done
-
-          echo "Computed release_version=$RELEASE_VERSION"
-          echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
-
-          # update package.json to release_version
-          jq --arg v "$RELEASE_VERSION" '.version=$v' package.json > package.tmp.json
-          mv package.tmp.json package.json
-
-          # update vss-extension.json if present
-          if [ -f vss-extension.json ]; then
-            jq --arg v "$RELEASE_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
-            mv vss-extension.tmp.json vss-extension.json
-          fi
-
-      # --- Create pre-release branch (from current branch) ---
-      - name: Create pre-release branch
-        working-directory: plugin
-        run: |
-          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
-          CURRENT_BRANCH=${GITHUB_REF_NAME}
-          git fetch origin $CURRENT_BRANCH
-          git checkout -B pre-release/$RELEASE_VERSION origin/$CURRENT_BRANCH
-          git add -A
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          if ! git diff --cached --quiet; then
-            git commit -m "Prepare pre-release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
-          fi
-          git push origin pre-release/$RELEASE_VERSION --force-with-lease
-
-      # --- Create Git tag for pre-release (v<release_version>-pre) and push ---
-      - name: Create pre-release tag
-        working-directory: plugin
-        run: |
-          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
-          TAG=v${RELEASE_VERSION}-pre
-          # create / force update tag
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            git tag -f "$TAG" -m "Pre-release $RELEASE_VERSION"
-          else
-            git tag -a "$TAG" -m "Pre-release $RELEASE_VERSION"
-          fi
-          git push origin "$TAG" --force
-
-      # --- Zip plugin artifact (create zip in workspace root) ---
-      - name: Zip plugin artifact
-        working-directory: plugin
-        run: |
-          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
-          ZIP=plugin-$RELEASE_VERSION.zip
-          zip -r "../$ZIP" .
-          ls -la "../$ZIP"
-
-      # --- Create GitHub pre-release and upload asset ---
-      - name: Create GitHub pre-release and upload asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: stapeDev/it.stapedev.vscode.mokkybuddy
-          RELEASE_VERSION: ${{ steps.compute_release_version.outputs.release_version }}
-        run: |
-          TAG=v${RELEASE_VERSION}-pre
-          PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $RELEASE_VERSION" \
-            '{tag_name: $tag, name: $name, body: $body, prerelease: true}')
-          echo "$PAYLOAD" > /tmp/release_payload.json
-
-          RESP=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases" -d @/tmp/release_payload.json)
-
-          UPLOAD_URL=$(echo "$RESP" | jq -r '.upload_url')
-          if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
-            echo "Failed to create release. Response:"
-            echo "$RESP"
-            exit 1
-          fi
-
-          ZIP=plugin-${RELEASE_VERSION}.zip
-          UPLOAD_URL_EXPANDED="${UPLOAD_URL%\{*}?name=$ZIP"
-          echo "Uploading $ZIP to $UPLOAD_URL_EXPANDED"
-          curl -s --data-binary @"$ZIP" \
-              -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Content-Type: application/zip" \
-              "$UPLOAD_URL_EXPANDED" | jq -r '.browser_download_url'
-
-      # --- Ensure dependencies for packaging & publish to Marketplace (publish the RELEASE_VERSION) ---
-      - name: Publish VSCode Plugin (release version)
-        working-directory: plugin
-        run: |
-          npm ci
-          echo "Publishing version: $(jq -r '.version' package.json)"
-          npx @vscode/vsce publish
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      # --- After successful publish: bump package.json to next patch and push to pre-release branch ---
-      - name: Bump package.json to next patch and push to pre-release branch
-        working-directory: plugin
-        run: |
-          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
-          NEXT_PATCH=$((PATCH+1))
-          NEXT_VERSION="$MAJOR.$MINOR.$NEXT_PATCH"
-          echo "Bumping package.json to next version: $NEXT_VERSION"
-
-          jq --arg v "$NEXT_VERSION" '.version=$v' package.json > package.tmp.json
-          mv package.tmp.json package.json
-
-          if [ -f vss-extension.json ]; then
-            jq --arg v "$NEXT_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
-            mv vss-extension.tmp.json vss-extension.json
-          fi
-
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add package.json vss-extension.json || git add package.json || true
-          git commit -m "Bump version to $NEXT_VERSION after pre-release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
-
-          # ensure branch exists and push the bumped version there
-          git checkout -B pre-release/$RELEASE_VERSION
-          git push origin pre-release/$RELEASE_VERSION --force-with-lease
-
-      # --- Create PR from pre-release/<release_version> -> main ---
+      # --- Crea la PR (rimossa la creazione del branch e del tag) ---
       - name: Create PR to main
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/features/') }}
         run: |
-          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
-          if gh pr list --base main --head pre-release/$RELEASE_VERSION --json number --jq '.[0].number' | grep -q .; then
-            echo "PR from pre-release/$RELEASE_VERSION to main already exists, skip."
+          if gh pr list --base main --head ${{ github.ref_name }} --json number --jq '.[0].number' | grep -q .; then
+            echo "PR already exists, skip."
           else
             gh pr create \
               --base main \
-              --head pre-release/$RELEASE_VERSION \
-              --title "PR from pre-release/$RELEASE_VERSION to main." \
-              --body "Automated pre-release PR from pre-release/$RELEASE_VERSION to main."
+              --head ${{ github.ref_name }} \
+              --title "Automated PR for feature branch ${{ github.ref_name }}"
           fi
         env:
           GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
