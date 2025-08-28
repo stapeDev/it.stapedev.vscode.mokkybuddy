@@ -51,7 +51,7 @@ jobs:
 
       # Download API JAR
       - name: Download API JAR
-        run: .github/scripts/download-jar.sh ${{ steps.get_java.outputs.version }}
+        run: plugin/.github/scripts/download-jar.sh ${{ steps.get_java.outputs.version }}
 
       # Install & test plugin
       - run: npm ci
@@ -78,11 +78,11 @@ jobs:
       # Bump versione plugin
       - name: Bump version
         id: bump
-        run: .github/scripts/bump-version.sh ${{ needs.prepare.outputs.java_version }}
+        run: plugin/.github/scripts/bump-version.sh ${{ needs.prepare.outputs.java_version }}
 
       # Aggiorna CHANGELOG e README/features
       - name: Update changelog
-        run: .github/scripts/update-changelog.sh
+        run: plugin/.github/scripts/update-changelog.sh
 
   release:
     runs-on: ubuntu-latest
@@ -96,11 +96,11 @@ jobs:
 
       # Create branch/tag pre-release
       - name: Create branch/tag/pre-release
-        run: .github/scripts/create-prerelease.sh ${{ needs.versioning.outputs.release_version }}
+        run: plugin/.github/scripts/create-prerelease.sh ${{ needs.versioning.outputs.release_version }}
 
       # Publish pre-release su Marketplace
       - name: Publish Marketplace pre-release
-        run: .github/scripts/publish-prerelease.sh
+        run: plugin/.github/scripts/publish-prerelease.sh
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
