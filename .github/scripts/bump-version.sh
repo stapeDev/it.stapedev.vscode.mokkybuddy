@@ -28,4 +28,13 @@ else
   fi
 fi
 
+# Aggiorna branch locale
+git config user.name "github-actions"
+git config user.email "github-actions@github.com"
+git add package.json vss-extension.json || git add package.json
+if ! git diff --cached --quiet; then
+  git commit -m "Bump plugin version to $(jq -r '.version' package.json) [skip ci]" || true
+fi
+
+# Output finale
 echo "release_version=$(jq -r '.version' package.json)" >> $GITHUB_OUTPUT
