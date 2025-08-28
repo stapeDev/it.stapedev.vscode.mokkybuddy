@@ -19,19 +19,50 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin-repo
 
-      # --- Download artifact dalla pre-release ---
-      - name: Download pre-release artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: plugin-final
-          path: plugin-artifact
-
-      # --- Leggi versione dal package.json ---
+      # --- Read version from repository (main) ---
       - name: Read plugin version
         id: version
         run: |
-          VERSION=$(jq -r '.version' plugin-artifact/package.json)
+          VERSION=$(jq -r '.version' plugin-repo/package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # --- Download pre-release asset from GitHub Release (NEW) ---
+      - name: Download pre-release asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: stapeDev/it.stapedev.vscode.mokkybuddy
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG=v${VERSION}-pre
+          echo "Fetching release for tag $TAG"
+          RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
+
+          ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .url' )
+          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+            echo "Asset not found for tag $TAG. Response:"
+            echo "$RESP"
+            exit 1
+          fi
+
+          FNAME=plugin-${VERSION}.zip
+          echo "Downloading asset $FNAME"
+          curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
+            "$ASSET_URL" -o "$FNAME"
+
+          mkdir -p plugin-artifact
+          unzip -o "$FNAME" -d plugin-artifact
+
+      # --- Leggi versione dal package.json dentro l'artifact (stessa logica, ora dal repo) ---
+      - name: Read plugin version (artifact fallback)
+        id: version_artifact
+        run: |
+          if [ -f plugin-artifact/package.json ]; then
+            VERSION_ARTIFACT=$(jq -r '.version' plugin-artifact/package.json)
+            echo "version_artifact=$VERSION_ARTIFACT" >> $GITHUB_OUTPUT
+          else
+            echo "version_artifact=" >> $GITHUB_OUTPUT
+          fi
 
       # --- Copia artifact nella repo ---
       - name: Copy artifact into repo
