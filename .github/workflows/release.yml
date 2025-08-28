@@ -88,10 +88,15 @@ jobs:
             echo "version_artifact=" >> $GITHUB_OUTPUT
           fi
 
-      # --- Copy artifact into repo (preserve package.json) ---
+      # --- Copy artifact into repo (senza node_modules) ---
       - name: Copy artifact into repo
         run: |
-          rsync -av --delete --exclude 'package.json' --exclude 'vss-extension.json' plugin-artifact/ .
+          rsync -av --delete \
+            --exclude 'package.json' \
+            --exclude 'vss-extension.json' \
+            --exclude 'node_modules' \
+            plugin-artifact/ .
+          
           git add -A || true
 
       # --- Create release branch (stile pre-release) ---
