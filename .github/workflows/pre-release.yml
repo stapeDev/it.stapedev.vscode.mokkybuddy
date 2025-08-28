@@ -257,7 +257,8 @@ jobs:
           RELEASE_VERSION: ${{ steps.compute_release_version.outputs.release_version }}
         run: |
           TAG=v${RELEASE_VERSION}-pre
-          PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $RELEASE_VERSION" '{"tag_name':$tag,"name":$name,"body":$body,"prerelease":true}')
+          PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $RELEASE_VERSION" \
+            '{tag_name: $tag, name: $name, body: $body, prerelease: true}')
           echo "$PAYLOAD" > /tmp/release_payload.json
 
           RESP=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
