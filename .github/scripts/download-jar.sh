@@ -8,16 +8,29 @@ TARGET_FILE="$TARGET_DIR/mokkyBuddyAPI.jar"
 
 mkdir -p "$TARGET_DIR"
 
-RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
-  -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/$REPO/releases/tags/v$JAVA_VERSION" \
-  | jq -r '.id')
+# Funzione per ottenere release ID
+get_release_id() {
+  local TAG=$1
+  curl -s -H "Authorization: token $JAVA_APP_PAT" \
+       -H "Accept: application/vnd.github+json" \
+       "https://api.github.com/repos/$REPO/releases/tags/$TAG" \
+       | jq -r '.id'
+}
 
+# Prova release stabile
+RELEASE_ID=$(get_release_id "v$JAVA_VERSION")
+
+# Se non esiste, prova pre-release
 if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then
-  echo "Release not found for version $JAVA_VERSION!"
-  exit 1
+  echo "Stable release not found for version $JAVA_VERSION, trying pre-release..."
+  RELEASE_ID=$(get_release_id "v$JAVA_VERSION-pre")
+  if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then
+    echo "Release not found for version $JAVA_VERSION or $JAVA_VERSION-pre!"
+    exit 1
+  fi
 fi
 
+# Scarica l’asset .jar
 ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
   -H "Accept: application/vnd.github+json" \
   "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
