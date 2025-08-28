@@ -26,56 +26,61 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      # --- Fetch latest pre-release version ---
+      # --- Fetch latest pre-release tag and derive ARTIFACT_VERSION (no leading v) ---
       - name: Get latest pre-release version
         id: version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: stapeDev/it.stapedev.vscode.mokkybuddy
         run: |
-          LATEST_PRERELEASE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          LATEST_PRERELEASE_TAG=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases" | jq -r '.[] | select(.prerelease==true) | .tag_name' | sort -V | tail -n1)
+            "https://api.github.com/repos/$REPO/releases" \
+            | jq -r '.[] | select(.prerelease==true) | .tag_name' | sort -V | tail -n1)
 
-          if [ -z "$LATEST_PRERELEASE" ]; then
+          if [ -z "$LATEST_PRERELEASE_TAG" ] || [ "$LATEST_PRERELEASE_TAG" = "null" ]; then
             echo "No pre-release found!"
             exit 1
           fi
 
-          VERSION="${LATEST_PRERELEASE%-pre}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Latest pre-release tag: $LATEST_PRERELEASE"
+          # strip leading v (if any) and trailing -pre
+          ARTIFACT_VERSION="${LATEST_PRERELEASE_TAG#v}"
+          ARTIFACT_VERSION="${ARTIFACT_VERSION%-pre}"
 
-      # --- Download pre-release asset from GitHub Release ---
+          echo "artifact_version=$ARTIFACT_VERSION" >> $GITHUB_OUTPUT
+          echo "latest_prerelease_tag=$LATEST_PRERELEASE_TAG" >> $GITHUB_OUTPUT
+          echo "Found latest pre-release tag: $LATEST_PRERELEASE_TAG -> artifact_version=$ARTIFACT_VERSION"
+
+      # --- Download pre-release asset from GitHub Release (artifact) ---
       - name: Download pre-release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: stapeDev/it.stapedev.vscode.mokkybuddy
-          VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT_VERSION: ${{ steps.version.outputs.artifact_version }}
         run: |
-          # rimuovo eventuale prefisso v
-          VERSION_CLEAN=${VERSION#v}
-          LATEST_TAG=v${VERSION_CLEAN}-pre
+          VERSION=${ARTIFACT_VERSION}
+          LATEST_TAG=v${VERSION}-pre
           echo "Fetching release for tag $LATEST_TAG"
           RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases/tags/$LATEST_TAG")
 
-          ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
+          ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' || true)
           if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
             echo "Asset not found for tag $LATEST_TAG. Response:"
             echo "$RESP"
             exit 1
           fi
 
-          FNAME=plugin-${VERSION_CLEAN}.zip
-          echo "Downloading asset $FNAME"
+          FNAME=plugin-${VERSION}.zip
+          echo "Downloading asset $FNAME from $ASSET_URL"
           curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
             "$ASSET_URL" -o "$FNAME"
 
           mkdir -p plugin-artifact
           unzip -o "$FNAME" -d plugin-artifact
+          echo "Unzipped artifact into plugin-artifact/"
 
-      # --- Read version from artifact as fallback ---
+      # --- Read version from artifact as fallback (ARTIFACT_VERSION detection) ---
       - name: Read plugin version (artifact fallback)
         id: version_artifact
         run: |
@@ -86,18 +91,36 @@ jobs:
             echo "version_artifact=" >> $GITHUB_OUTPUT
           fi
 
-      # --- Copy artifact into repository ---
-      - name: Copy artifact into repo
+      # --- Copy artifact into repository BUT DO NOT overwrite package.json / vss-extension.json ---
+      - name: Copy artifact into repo (preserve package.json)
         run: |
-          cp -R plugin-artifact/* plugin-repo/
-          cd plugin-repo
-          git add -A
+          # copy everything from plugin-artifact/ into plugin-repo, excluding package.json and vss-extension.json
+          # rsync preserves permissions and is available on ubuntu runners
+          rsync -av --delete --exclude 'package.json' --exclude 'vss-extension.json' plugin-artifact/ plugin-repo/
+          # show a short tree for debugging
+          echo "plugin-repo content after copy:"
+          ls -la plugin-repo | sed -n '1,200p'
 
-      # --- Create release branch ---
+          # ensure package.json in plugin-repo is intact and show versions
+          echo "plugin-repo/package.json version:"
+          jq -r '.version' plugin-repo/package.json || true
+          echo "artifact package.json version (if present):"
+          [ -f plugin-artifact/package.json ] && jq -r '.version' plugin-artifact/package.json || true
+
+          # stage changes in plugin-repo
+          cd plugin-repo
+          git add -A || true
+
+      # --- Create release branch (based on ARTIFACT version) ---
       - name: Create release branch
         run: |
           cd plugin-repo
-          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.version }}
+          # prefer artifact version, fallback to plugin-repo package.json
+          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.artifact_version || '' }}
+          if [ -z "$RELEASE_VERSION" ]; then
+            echo "No release version available!"
+            exit 1
+          fi
           RELEASE_BRANCH=release/$RELEASE_VERSION
           if git show-ref --verify --quiet refs/heads/$RELEASE_BRANCH; then
             git checkout $RELEASE_BRANCH
@@ -106,15 +129,15 @@ jobs:
           fi
 
           if ! git diff --cached --quiet; then
-            git commit -m "Prepare release $RELEASE_VERSION [skip ci]"
+            git commit -m "Prepare release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
             git push origin $RELEASE_BRANCH
           fi
 
-      # --- Create release tag ---
+      # --- Create release tag (artifact version) ---
       - name: Create release tag
         run: |
           cd plugin-repo
-          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.version }}
+          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.artifact_version }}
           TAG=v$RELEASE_VERSION
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists, skip"
@@ -123,14 +146,18 @@ jobs:
             git push origin $TAG
           fi
 
-      # --- Install dependencies before publishing ---
+      # --- Install dependencies before publishing (on plugin-repo) ---
       - name: Install Node dependencies
         working-directory: plugin-repo
         run: npm ci
 
-      # --- Publish plugin to VSCode Marketplace ---
-      - name: Publish VSCode Plugin as release
+      # --- Publish plugin to VSCode Marketplace using plugin-repo/package.json version ---
+      - name: Publish VSCode Plugin as release (use package.json in repo)
         working-directory: plugin-repo
-        run: npx @vscode/vsce publish
+        run: |
+          PUBLISH_VERSION=$(jq -r '.version' package.json)
+          echo "Publishing version from plugin-repo/package.json: $PUBLISH_VERSION"
+          # run publish (this reads package.json for version)
+          npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
