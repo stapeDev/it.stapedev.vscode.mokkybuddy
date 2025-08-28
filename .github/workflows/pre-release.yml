@@ -201,3 +201,4 @@ jobs:
             --body "Automated pre-release PR from pre-release/$VERSION to main."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: .
