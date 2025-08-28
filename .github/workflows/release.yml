@@ -1,5 +1,5 @@
 name: Release MokkyBuddy VSCode Plugin
-# Concedi i permessi di scrittura per poter creare release.
+# Concedi i permessi di scrittura al job per creare release e caricare asset.
 permissions:
   contents: write
 
@@ -82,9 +82,9 @@ jobs:
           curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
             "$ASSET_URL" -o "$FNAME"
 
-          echo "Unzipped artifact into plugin-artifact/"
           mkdir -p plugin-artifact
           unzip -o "$FNAME" -d plugin-artifact
+          echo "Unzipped artifact into plugin-artifact/"
 
       # --- Installa le dipendenze di Node ---
       - name: Install Node dependencies
