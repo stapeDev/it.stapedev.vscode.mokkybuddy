@@ -19,21 +19,33 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin-repo
 
-      # --- Download pre-release artifact ---
-      - name: Download plugin artifact from pre-release
-        uses: actions/download-artifact@v4
-        with:
-          name: plugin-final
-          path: plugin-artifact
+      # --- Find last successful pre-release run and download artifact ---
+      - name: Download latest pre-release artifact
+        run: |
+          echo "Fetching last successful pre-release run..."
+          LATEST_RUN_ID=$(gh run list \
+            --workflow "Build & Pre-release MokkyBuddy VSCode Plugin" \
+            --branch $(git rev-parse --abbrev-ref HEAD) \
+            --status success \
+            --json databaseId \
+            --jq '.[0].databaseId')
 
-      # --- Copia artifact nella repo ---
+          if [ -z "$LATEST_RUN_ID" ]; then
+            echo "No successful pre-release run found. Exiting."
+            exit 1
+          fi
+
+          echo "Latest run ID: $LATEST_RUN_ID"
+          gh run download $LATEST_RUN_ID --name plugin-final --dir plugin-artifact
+
+      # --- Copy artifact into repo ---
       - name: Copy artifact into repo
         run: |
           cp -R plugin-artifact/* plugin-repo/
           cd plugin-repo
           git add -A
 
-      # --- Determina versione ---
+      # --- Determine plugin version ---
       - name: Determine plugin version
         id: version
         run: |
@@ -45,7 +57,7 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # --- Crea branch release ---
+      # --- Create release branch ---
       - name: Create release branch
         run: |
           cd plugin-repo
@@ -61,7 +73,7 @@ jobs:
             git push origin $RELEASE_BRANCH
           fi
 
-      # --- Crea tag release ---
+      # --- Create release tag ---
       - name: Create release tag
         run: |
           cd plugin-repo
@@ -73,7 +85,7 @@ jobs:
             git push origin $TAG
           fi
 
-      # --- Pubblica plugin su VSCode Marketplace ---
+      # --- Publish VSCode Plugin as release ---
       - name: Publish VSCode Plugin as release
         working-directory: plugin-repo
         run: npx @vscode/vsce publish
