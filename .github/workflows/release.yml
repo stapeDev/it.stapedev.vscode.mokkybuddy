@@ -19,7 +19,7 @@ jobs:
         # Il token è fornito automaticamente dall'ambiente di GitHub Actions.
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # --- Configura l'identità Git ---
       - name: Configure Git identity
@@ -135,27 +135,6 @@ jobs:
 
           # Aggiungi le modifiche a git.
           git add -A || true
-
-      # --- Crea il branch di release ---
-      - name: Create release branch
-        working-directory: .
-        run: |
-          RELEASE_VERSION=$(jq -r '.version' package.json)
-          CURRENT_BRANCH=${GITHUB_REF_NAME}
-
-          git fetch origin $CURRENT_BRANCH
-          git checkout -B release/$RELEASE_VERSION origin/$CURRENT_BRANCH
-
-          git add -A
-          # Imposta l'utente e l'email anche qui, per sicurezza.
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          if ! git diff --cached --quiet; then
-            git commit -m "Prepare release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
-          fi
-
-          # Esegui il push, l'autenticazione è gestita dall'azione di checkout.
-          git push origin release/$RELEASE_VERSION --force-with-lease
 
       # --- Crea il tag di release ---
       - name: Create release tag
