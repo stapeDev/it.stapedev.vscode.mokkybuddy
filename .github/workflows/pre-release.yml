@@ -124,7 +124,10 @@ jobs:
       # Crea PR dal branch pre-release verso main
       - name: Create PR to main
         run: |
+          cd plugin
           RELEASE_VERSION=${{ needs.versioning.outputs.release_version }}
+          
+          # Controlla se esiste già una PR per questo pre-release
           if gh pr list --base main --head pre-release/$RELEASE_VERSION --json number --jq '.[0].number' | grep -q .; then
             echo "PR from pre-release/$RELEASE_VERSION to main already exists, skip."
           else
