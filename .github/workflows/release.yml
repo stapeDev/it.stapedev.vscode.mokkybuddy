@@ -1,24 +1,17 @@
 name: Release MokkyBuddy VSCode Plugin
 permissions:
   contents: write
-  
+
 on:
-  workflow_run:
-    workflows: ["Pre-release MokkyBuddy VSCode Plugin"]
-    types:
-      - completed
+  push:
+    branches:
+      - 'main'
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Download plugin artifact from pre-release
-        uses: actions/download-artifact@v4
-        with:
-          name: plugin-final
-          path: plugin
-
+      # --- Checkout plugin repo ---
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
@@ -26,26 +19,63 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin-repo
 
+      # --- Download pre-release artifact ---
+      - name: Download plugin artifact from pre-release
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin-artifact
+
+      # --- Copia artifact nella repo ---
+      - name: Copy artifact into repo
+        run: |
+          cp -R plugin-artifact/* plugin-repo/
+          cd plugin-repo
+          git add -A
+
+      # --- Determina versione ---
+      - name: Determine plugin version
+        id: version
+        run: |
+          cd plugin-repo
+          VERSION=$(jq -r '.version' package.json)
+          if [ -z "$VERSION" ]; then
+            echo "Version is empty! Exiting."
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # --- Crea branch release ---
       - name: Create release branch
         run: |
-          VERSION=$(jq -r '.version' plugin/package.json)
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git checkout -b release/$VERSION
-          cp -R ../plugin/* ./plugin-repo/
-          git add -A
-          git commit -m "Prepare release $VERSION [skip ci]"
-          git push origin release/$VERSION --force
+          cd plugin-repo
+          RELEASE_BRANCH=release/${{ steps.version.outputs.version }}
+          if git show-ref --verify --quiet refs/heads/$RELEASE_BRANCH; then
+            echo "Branch $RELEASE_BRANCH already exists, using existing branch"
+            git checkout $RELEASE_BRANCH
+          else
+            git checkout -b $RELEASE_BRANCH
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "Prepare release ${{ steps.version.outputs.version }} [skip ci]"
+            git push origin $RELEASE_BRANCH
+          fi
 
+      # --- Crea tag release ---
       - name: Create release tag
         run: |
-          VERSION=$(jq -r '.version' plugin/package.json)
-          git tag -fa v$VERSION -m "Release $VERSION"
-          git push origin v$VERSION --force
+          cd plugin-repo
+          TAG=v${{ steps.version.outputs.version }}
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists, skipping creation"
+          else
+            git tag -a $TAG -m "Release $TAG"
+            git push origin $TAG
+          fi
 
+      # --- Pubblica plugin su VSCode Marketplace ---
       - name: Publish VSCode Plugin as release
-        working-directory: plugin
-        run: |
-          npx @vscode/vsce publish
+        working-directory: plugin-repo
+        run: npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
