@@ -1,4 +1,6 @@
 name: Dependabot Build & Test MokkyBuddy VSCode Plugin
+permissions:
+  contents: read
 
 on:
   push:

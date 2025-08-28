@@ -1,4 +1,7 @@
 name: Build & Pre-release MokkyBuddy VSCode Plugin
+permissions:
+  contents: write
+  pull-requests: write
 
 on:
   repository_dispatch:

@@ -1,5 +1,7 @@
 name: Release MokkyBuddy VSCode Plugin
-
+permissions:
+  contents: write
+  
 on:
   workflow_run:
     workflows: ["Pre-release MokkyBuddy VSCode Plugin"]
