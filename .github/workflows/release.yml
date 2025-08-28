@@ -1,50 +1,108 @@
-name: Release MokkyBuddy VSCode Plugin
-permissions:
-  contents: write
+# File: .github/workflows/release.yml
 
+name: Release MokkyBuddy VSCode Plugin
+
+# La pipeline di release si avvia solo quando una Pull Request viene mergiata nel branch main
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
-      - 'main'
+      - main
+    if: github.event.pull_request.merged == true
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      # --- Scarica l'artefatto di build dalla pipeline di pre-release ---
-      - name: Download VSIX artifact
-        uses: actions/download-artifact@v4
+      # --- Checkout del repository del plugin ---
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
         with:
-          name: vsix-artifact
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
+          # Fetch della storia completa per il calcolo del bump di versione e la creazione del tag
+          fetch-depth: 0
 
-      - name: Get tag version
-        id: version
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "artifact_version=$VERSION" >> $GITHUB_OUTPUT
-      
-      - name: Setup Node for vsce
+      # --- Setup ambiente ---
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      # --- Pubblica il plugin su VSCode Marketplace ---
-      - name: Publish VSCode Plugin as release
+      # --- Installazione GitHub CLI ---
+      - name: Install GitHub CLI
         run: |
-          ls -la
-          npx @vscode/vsce publish --packagePath *.vsix
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          sudo apt-get update
+          sudo apt-get install gh -y
 
-      # --- Crea la release su GitHub ---
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref }}
-          name: Release ${{ steps.version.outputs.artifact_version }}
-          draft: false
-          prerelease: false
-          files: '*.vsix'
+      # --- Installazione dipendenze e test del Plugin ---
+      - name: Install Plugin dependencies
+        working-directory: plugin
+        run: npm ci
+
+      - name: Run Plugin tests
+        working-directory: plugin
+        run: npm test
+
+      # --- Aggiorna versione finale e crea commit ---
+      - name: Update final version and create commit
+        working-directory: plugin
+        id: update_final_version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Calcola la versione finale, con numero minor pari
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          FINAL_VERSION="$MAJOR.$((MINOR + 1)).0"
+
+          # Aggiorna package.json e vss-extension.json con la versione finale
+          jq ".version = \"$FINAL_VERSION\"" package.json > temp.json && mv temp.json package.json
+          jq ".version = \"$FINAL_VERSION\"" vss-extension.json > temp.json && mv temp.json vss-extension.json
+          
+          # Aggiorna il README, CHANGELOG e features
+          sed -i "s|Java App v[0-9]\+\.[0-9]\+\.[0-9]\+|Java App v${{ steps.get_java_version.outputs.java_version_clean }}|g" README.md
+          
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          COMMITS=$(git log --pretty=format:"- %s" ${LAST_TAG}..HEAD)
+
+          echo -e "$COMMITS\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
+          
+          FEATURES=$(echo "$COMMITS" | grep "feat\|BREAKING CHANGE")
+          if [ -n "$FEATURES" ]; then
+            echo -e "$FEATURES\n\n$(cat features.md)" > features.md
+          fi
+          
+          # Configura Git e committa le modifiche
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          
+          git add resources/mokkyBuddyAPI.jar package.json vss-extension.json README.md CHANGELOG.md features.md
+          git commit -m "chore(release): Release v$FINAL_VERSION" || true
+
+          echo "FINAL_VERSION=$FINAL_VERSION" >> $GITHUB_OUTPUT
+
+      # --- Creazione tag e release su GitHub ---
+      - name: Create tag and GitHub release
+        working-directory: plugin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FINAL_VERSION: ${{ steps.update_final_version.outputs.FINAL_VERSION }}
+        run: |
+          TAG_NAME="v$FINAL_VERSION"
+          
+          # Creazione e push del tag
+          git tag $TAG_NAME -a -m "Release tag for v$FINAL_VERSION"
+          git push origin $TAG_NAME
+          
+          # Creazione della release su GitHub
+          gh release create $TAG_NAME --title "MokkyBuddy VSCode Plugin v$FINAL_VERSION" --notes ""
+
+      # --- Pubblicazione su Marketplace (versione finale) ---
+      - name: Publish VSCode Plugin (final release)
+        working-directory: plugin
+        run: |
+          npx @vscode/vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}

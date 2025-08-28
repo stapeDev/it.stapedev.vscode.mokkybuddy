@@ -1,21 +1,22 @@
+# File: .github/workflows/pre-release.yml
+
 name: Build & Pre-release MokkyBuddy VSCode Plugin
+
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 on:
-  repository_dispatch:
-    types: [trigger-plugin-pre-release-build]
   push:
     branches:
       - 'features/**'
       - 'feature/**'
 
 jobs:
-  build_and_pre_release:
+  build-and-pre-release:
     runs-on: ubuntu-latest
     steps:
-      # --- Checkout Plugin e Java App ---
+      # --- Checkout plugin e Java App ---
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
@@ -28,73 +29,187 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
-          ref: ${{ github.event.client_payload.branch || 'main' }}
+          ref: main
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
           fetch-depth: 0
 
-      # --- Setup Node e Download JAR ---
+      # --- Setup ambiente ---
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
+      # --- Installazione GitHub CLI ---
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install gh -y
+
+      # --- Recupero versione Java App ---
       - name: Get Java App version
         id: get_java_version
         run: |
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
+          echo "Found Java App version: $VERSION_CLEAN"
 
+      # --- Download JAR da GitHub Release ---
       - name: Download JAR artifact from Java App release
         env:
           JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
           VERSION: ${{ steps.get_java_version.outputs.java_version_clean }}
         run: |
           REPO="stapeDev/it.stapedev.api.mokkybuddy"
-          TARGET_DIR=plugin/resources
-          TARGET_FILE=$TARGET_DIR/mokkyBuddyAPI.jar
-          mkdir -p $TARGET_DIR
-          RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" | jq -r '.id')
-          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then echo "Release not found!"; exit 1; fi
-          ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" | jq -r '.[] | select(.name | endswith(".jar")) | .url')
-          curl -L -H "Authorization: token $JAVA_APP_PAT" -H "Accept: application/octet-stream" "$ASSET_URL" -o "$TARGET_FILE"
+          TARGET_DIR="plugin/resources"
+          TARGET_FILE="$TARGET_DIR/mokkyBuddyAPI.jar"
+          mkdir -p "$TARGET_DIR"
 
-      # --- Build e Test ---
-      - name: Install dependencies
+          echo "Downloading JAR for version v$VERSION"
+          RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" \
+            | jq -r '.id')
+          
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then
+            echo "Release 'v$VERSION' non trovata. Controlla che il tag esista nel repository di Java App."
+            exit 1
+          fi
+
+          ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
+            -H "Accept: application/vnd.github.com/v3+json" \
+            "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
+            | jq -r '.[] | select(.name | endswith(".jar")) | .url')
+
+          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" == "null" ]; then
+            echo "Asset JAR non trovato per la release 'v$VERSION'."
+            exit 1
+          fi
+
+          curl -L -H "Authorization: token $JAVA_APP_PAT" \
+            -H "Accept: application/octet-stream" \
+            "$ASSET_URL" -o "$TARGET_FILE"
+          
+          echo "JAR scaricato in $TARGET_FILE"
+
+      # --- Installazione dipendenze e test del Plugin ---
+      - name: Install Plugin dependencies
         working-directory: plugin
-        run: npm install
+        run: npm ci
 
-      - name: Run tests
+      - name: Run Plugin tests
         working-directory: plugin
         run: npm test
 
-      # --- Crea l'artefatto del plugin (non la release!) ---
-      - name: Package plugin artifact
+      # --- Calcola e aggiorna versione di pre-release ---
+      - name: Calculate and update pre-release version
+        working-directory: plugin
+        id: update_pre_version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          JAVA_VERSION=${{ steps.get_java_version.outputs.java_version_clean }}
+
+          semver_gt() {
+            [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+          }
+          
+          BUMP_TYPE="patch"
+          if git log --pretty=oneline --since="2 days ago" | grep -q "feat"; then
+            BUMP_TYPE="minor"
+          elif git log --pretty=oneline --since="2 days ago" | grep -q "BREAKING CHANGE"; then
+            BUMP_TYPE="major"
+          fi
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+          if [ $((MINOR % 2)) -eq 0 ]; then
+            NEW_MINOR=$((MINOR + 1))
+            NEW_PATCH=0
+          else
+            NEW_MINOR=$MINOR
+            NEW_PATCH=$((PATCH + 1))
+          fi
+
+          PRE_RELEASE_VERSION="$MAJOR.$NEW_MINOR.$NEW_PATCH"
+
+          if semver_gt "$JAVA_VERSION" "$PRE_RELEASE_VERSION"; then
+            echo "Allineiamo alla versione Java App $JAVA_VERSION"
+            PRE_RELEASE_VERSION=$JAVA_VERSION
+          else
+            echo "Non ci sono differenze di versione, facciamo un bump $BUMP_TYPE"
+          fi
+
+          jq ".version = \"$PRE_RELEASE_VERSION\"" package.json > temp.json && mv temp.json package.json
+          jq ".version = \"$(jq -r .version package.json)\"" vss-extension.json > temp.json && mv temp.json vss-extension.json
+
+          echo "PRE_RELEASE_VERSION=$PRE_RELEASE_VERSION" >> $GITHUB_OUTPUT
+
+      # --- Pubblicazione su Marketplace (pre-release) ---
+      - name: Publish VSCode Plugin (pre-release)
         working-directory: plugin
         run: |
-          npx @vscode/vsce package
-
-      # --- Carica l'artefatto per renderlo disponibile alla pipeline di release ---
-      - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: vsix-artifact
-          path: plugin/*.vsix
-
-      # --- Crea la PR (rimossa la creazione del branch e del tag) ---
-      - name: Create PR to main
-        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/features/') }}
-        run: |
-          if gh pr list --base main --head ${{ github.ref_name }} --json number --jq '.[0].number' | grep -q .; then
-            echo "PR from ${{ github.ref_name }} to main already exists, skip."
-          else
-            gh pr create \
-              --base main \
-              --head ${{ github.ref_name }} \
-              --title "PR from feature branch ${{ github.ref_name }}" \
-              --body "This PR was automatically created from branch ${{ github.ref_name }}."
-          fi
+          npx @vscode/vsce publish --pre-release
         env:
-          GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
-          GH_REPO: stapeDev/it.stapedev.vscode.mokkybuddy
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      # --- Aggiorna versione finale e crea PR ---
+      - name: Update final version and create PR
+        working-directory: plugin
+        id: update_final_version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Checkout sul branch corrente per evitare conflitti
+          git checkout ${{ github.ref_name }}
+          git pull origin ${{ github.ref_name }}
+
+          # Calcola la versione finale, con numero minor pari
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          FINAL_VERSION="$MAJOR.$((MINOR + 1)).0"
+
+          # Aggiorna package.json e vss-extension.json con la versione finale
+          jq ".version = \"$FINAL_VERSION\"" package.json > temp.json && mv temp.json package.json
+          jq ".version = \"$FINAL_VERSION\"" vss-extension.json > temp.json && mv temp.json vss-extension.json
+
+          # Aggiorna il README, CHANGELOG e features
+          sed -i "s|Java App v[0-9]\+\.[0-9]\+\.[0-9]\+|Java App v${{ steps.get_java_version.outputs.java_version_clean }}|g" README.md
+          
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          COMMITS=$(git log --pretty=format:"- %s" ${LAST_TAG}..HEAD)
+
+          echo -e "$COMMITS\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
+          
+          FEATURES=$(echo "$COMMITS" | grep "feat\|BREAKING CHANGE")
+          if [ -n "$FEATURES" ]; then
+            echo -e "$FEATURES\n\n$(cat features.md)" > features.md
+          fi
+
+          # Configura Git e committa le modifiche
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          
+          git add package.json vss-extension.json README.md CHANGELOG.md features.md
+          git commit -m "chore(release): Prepare v$FINAL_VERSION for main merge" || true
+          
+          BRANCH_NAME="release-v$FINAL_VERSION"
+          git checkout -b "$BRANCH_NAME"
+          git push -u origin "$BRANCH_NAME"
+
+          echo "FINAL_VERSION=$FINAL_VERSION" >> $GITHUB_OUTPUT
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      # --- Creazione Pull Request ---
+      - name: Create Pull Request
+        working-directory: plugin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ steps.update_final_version.outputs.BRANCH_NAME }}
+        run: |
+          gh pr create --base main --head "$BRANCH_NAME" \
+            --title "chore(release): v${{ steps.update_final_version.outputs.FINAL_VERSION }}" \
+            --body "Aggiorna il branch \`main\` per la release finale del plugin MokkyBuddy v${{ steps.update_final_version.outputs.FINAL_VERSION }}."
+
