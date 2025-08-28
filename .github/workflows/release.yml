@@ -11,22 +11,19 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      # --- Checkout repo ---
+      # --- Checkout repo principale ---
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
-          repository: stapeDev/it.stapedev.vscode.mokkybuddy
           token: ${{ secrets.GITHUB_TOKEN }}
-          path: plugin-repo
 
       # --- Configure Git identity ---
       - name: Configure Git identity
         run: |
-          cd plugin-repo
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      # --- Fetch latest pre-release tag and derive ARTIFACT_VERSION (no leading v) ---
+      # --- Fetch latest pre-release tag and derive ARTIFACT_VERSION (fallback) ---
       - name: Get latest pre-release version
         id: version
         env:
@@ -50,7 +47,7 @@ jobs:
           echo "latest_prerelease_tag=$LATEST_PRERELEASE_TAG" >> $GITHUB_OUTPUT
           echo "Found latest pre-release tag: $LATEST_PRERELEASE_TAG -> artifact_version=$ARTIFACT_VERSION"
 
-      # --- Download pre-release asset from GitHub Release (artifact) ---
+      # --- Download pre-release asset ---
       - name: Download pre-release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,8 +77,8 @@ jobs:
           unzip -o "$FNAME" -d plugin-artifact
           echo "Unzipped artifact into plugin-artifact/"
 
-      # --- Read version from artifact as fallback ---
-      - name: Read plugin version (artifact fallback)
+      # --- Read plugin version (artifact fallback) ---
+      - name: Read plugin version
         id: version_artifact
         run: |
           if [ -f plugin-artifact/package.json ]; then
@@ -91,31 +88,22 @@ jobs:
             echo "version_artifact=" >> $GITHUB_OUTPUT
           fi
 
-      # --- Copy artifact into repository (preserve package.json) ---
+      # --- Copy artifact into repo (preserve package.json) ---
       - name: Copy artifact into repo
         run: |
-          rsync -av --delete --exclude 'package.json' --exclude 'vss-extension.json' plugin-artifact/ plugin-repo/
-          echo "plugin-repo content after copy:"
-          ls -la plugin-repo | sed -n '1,200p'
-          echo "plugin-repo/package.json version:"
-          jq -r '.version' plugin-repo/package.json || true
-          echo "artifact package.json version (if present):"
-          [ -f plugin-artifact/package.json ] && jq -r '.version' plugin-artifact/package.json || true
-          cd plugin-repo
+          rsync -av --delete --exclude 'package.json' --exclude 'vss-extension.json' plugin-artifact/ .
           git add -A || true
 
-      # --- Create release branch ---
+      # --- Create release branch (stile pre-release) ---
       - name: Create release branch
+        working-directory: .
         run: |
-          # Prendi la versione dal package.json
           RELEASE_VERSION=$(jq -r '.version' package.json)
           CURRENT_BRANCH=${GITHUB_REF_NAME}
 
-          # Crea o passa al branch di release partendo dall'attuale
           git fetch origin $CURRENT_BRANCH
           git checkout -B release/$RELEASE_VERSION origin/$CURRENT_BRANCH
 
-          # Commit se ci sono modifiche
           git add -A
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
@@ -123,36 +111,34 @@ jobs:
             git commit -m "Prepare release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
           fi
 
-          # Push branch
           git push origin release/$RELEASE_VERSION --force-with-lease
 
       # --- Create release tag ---
       - name: Create release tag
+        working-directory: .
         run: |
           RELEASE_VERSION=$(jq -r '.version' package.json)
           TAG=v$RELEASE_VERSION
 
-          # Crea tag solo se non esiste
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             git tag -f "$TAG" -m "Release $RELEASE_VERSION"
           else
             git tag -a "$TAG" -m "Release $RELEASE_VERSION"
           fi
 
-          # Push tag
           git push origin "$TAG" --force
 
       # --- Install Node dependencies ---
       - name: Install Node dependencies
-        working-directory: plugin-repo
+        working-directory: .
         run: npm ci
 
       # --- Publish plugin to VSCode Marketplace ---
       - name: Publish VSCode Plugin as release
-        working-directory: plugin-repo
+        working-directory: .
         run: |
           PUBLISH_VERSION=$(jq -r '.version' package.json)
-          echo "Publishing version from plugin-repo/package.json: $PUBLISH_VERSION"
+          echo "Publishing version from package.json: $PUBLISH_VERSION"
           npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
