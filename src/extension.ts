@@ -258,7 +258,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     
     const checkPort = async (port: number): Promise<boolean> => {
-        if (process.env.NODE_ENV === 'test') return true;
+        if (process.env.NODE_ENV === 'test') {return true;}
         return new Promise(resolve => {
             const server = net.createServer();
             server.once('error', () => resolve(false));
@@ -269,12 +269,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Funzione helper per riavviare il server con gestione porta
     const restartServer = async (server: ServerDef) => {
-        if (server.running) stopServer(server);
+        if (server.running) {stopServer(server);}
 
         // Aspetta che la porta si liberi
         const maxRetries = 5;
         for (let i = 0; i < maxRetries; i++) {
-            if (await checkPort(server.port)) break;
+            if (await checkPort(server.port)) {break;}
             await new Promise(r => setTimeout(r, 500));
         }
 
@@ -338,7 +338,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.changePort', async (server: ServerDef) => {
             const portStr = await vscode.window.showInputBox({ placeHolder: 'New Port', value: String(server.port) });
-            if (!portStr) return;
+            if (!portStr) {return;}
             const newPort = Number(portStr);
             if (isNaN(newPort)) { vscode.window.showErrorMessage('Porta non valida'); return; }
             server.port = newPort;
@@ -369,9 +369,9 @@ export function activate(context: vscode.ExtensionContext) {
         }),
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.addAPI', async (server: ServerDef) => {
             const methodPick = await vscode.window.showQuickPick(['GET','POST','PUT','DELETE'], { placeHolder: 'HTTP Method' });
-            if (!methodPick) return;
+            if (!methodPick) {return;}
             const pathInput = await vscode.window.showInputBox({ placeHolder: '/path' });
-            if (!pathInput) return;
+            if (!pathInput) {return;}
         
             const api: ApiDef = { method: methodPick as HttpMethod, path: pathInput };
         
@@ -408,7 +408,7 @@ export function activate(context: vscode.ExtensionContext) {
         }),       
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.loadAPIConfig', async (server: ServerDef) => {
             const files = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectMany: false, filters: { 'JSON': ['json'] } });
-            if (!files || files.length === 0) return;
+            if (!files || files.length === 0) {return;}
             const fileUri = files[0];
         
             if (getCurrentApiMode() === 'database') {
@@ -453,7 +453,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Ferma tutti i server esistenti
             for (const server of servers) {
-                if (server.running) stopServer(server);
+                if (server.running) {stopServer(server);}
             }
 
             await vscode.workspace.getConfiguration('mokkyBuddy').update('apiMode', mode, vscode.ConfigurationTarget.Global);
