@@ -22,11 +22,13 @@ jobs:
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           path: plugin
+          fetch-depth: 0
       - uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
           ref: ${{ github.event.client_payload.branch || 'main' }}
           path: app
+          fetch-depth: 0
 
       # Setup Node.js
       - name: Setup Node.js
