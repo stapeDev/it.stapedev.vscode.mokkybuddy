@@ -47,7 +47,7 @@ jobs:
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
 
-      # --- Download JAR ---
+      # --- Download JAR (come prima) ---
       - name: Download JAR artifact from Java App release
         env:
           JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
@@ -86,7 +86,7 @@ jobs:
         working-directory: plugin
         run: npm test
 
-      # --- Aggiorna versione plugin basata su commit e Java App ---
+      # --- Aggiorna versione plugin basata su commit e Java App (stessa logica) ---
       - name: Update plugin version based on commits
         working-directory: plugin
         run: |
@@ -94,7 +94,6 @@ jobs:
           JAVA_VERSION=${{ steps.get_java_version.outputs.java_version_clean }}
           EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
 
-          # Recupera i commit dall'ultimo tag
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           RANGE=${LAST_TAG:+$LAST_TAG..HEAD}
           COMMITS=$(git log $RANGE --pretty=format:"%s%b" || true)
@@ -102,38 +101,30 @@ jobs:
           echo "Commits to analyze:"
           echo "$COMMITS"
 
-          # Funzione per confronto semantico
           semver_gt() {
             [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
           }
 
-          # Determina tipo di bump
           if echo "$COMMITS" | grep -q 'BREAKING CHANGE'; then
-            echo "BREAKING CHANGE trovata, incremento MAJOR"
             npm version major --no-git-tag-version
           elif echo "$COMMITS" | grep -q '^feat'; then
-            echo "Commits feature trovati, incremento MINOR"
             npm version minor --no-git-tag-version
           elif echo "$COMMITS" | grep -q '^fix'; then
-            echo "Commits fix trovati, incremento PATCH"
             npm version patch --no-git-tag-version
           else
             if semver_gt "$JAVA_VERSION" "$CURRENT_VERSION"; then
-              echo "Allineiamo alla versione Java App $JAVA_VERSION"
               npm version $JAVA_VERSION --no-git-tag-version
             else
-              echo "Incrementiamo PATCH di default"
               npm version patch --no-git-tag-version
             fi
           fi
 
-          # Aggiorna vss-extension.json se presente
           if [ -f vss-extension.json ]; then
             jq --arg v "$(jq -r '.version' package.json)" '.version=$v' vss-extension.json > vss-extension.tmp.json
             mv vss-extension.tmp.json vss-extension.json
           fi
 
-      # --- Aggiorna README, CHANGELOG e FEATURES ---
+      # --- Update docs (stessa logica) ---
       - name: Update docs
         working-directory: plugin
         run: |
@@ -168,7 +159,7 @@ jobs:
           VERSION=$(jq -r '.version' plugin/package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # --- Commit e pre-release ---
+      # --- Commit e pre-release (stessa logica) ---
       - name: Commit updates on current branch
         working-directory: plugin
         run: |
@@ -181,7 +172,7 @@ jobs:
             git push origin "$CURRENT_BRANCH" --force
           fi
 
-      # --- Crea branch pre-release ---
+      # --- Crea branch pre-release (stessa logica) ---
       - name: Create pre-release branch
         working-directory: plugin
         run: |
@@ -191,29 +182,57 @@ jobs:
           git checkout -B pre-release/$VERSION origin/$CURRENT_BRANCH
           git push origin pre-release/$VERSION --force-with-lease
 
-      # --- Crea tag pre-release ---
+      # --- Crea tag pre-release (stessa logica) ---
       - name: Create pre-release tag
         working-directory: plugin
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
           git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
           git push origin v$VERSION-pre --force
-      
-      # --- Upload plugin artifact ---
-      - name: Upload plugin artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: plugin-final
-          path: plugin
-          
-      # --- Pubblica plugin come pre-release su VSCode Marketplace ---
+
+      # --- Zip plugin and upload as GitHub Release asset (NEW) ---
+      - name: Zip plugin artifact
+        run: |
+          VERSION=${{ steps.set_version.outputs.version }}
+          ZIP=plugin-$VERSION.zip
+          cd plugin
+          zip -r ../$ZIP .
+          cd ..
+
+      - name: Create GitHub pre-release and upload asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: stapeDev/it.stapedev.vscode.mokkybuddy
+          VERSION: ${{ steps.set_version.outputs.version }}
+        run: |
+          TAG=v$VERSION-pre
+          PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $VERSION" '{"tag_name":$tag,"name":$name,"body":$body,"prerelease":true}')
+          echo "$PAYLOAD" > /tmp/release_payload.json
+
+          # Create release
+          RESP=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases" -d @/tmp/release_payload.json)
+
+          UPLOAD_URL=$(echo "$RESP" | jq -r '.upload_url')
+          if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
+            echo "Failed to create release. Response:"
+            echo "$RESP"
+            exit 1
+          fi
+
+          ZIP=plugin-$VERSION.zip
+          echo "Uploading $ZIP to $UPLOAD_URL"
+          curl -s --data-binary @"$ZIP" -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/zip" \
+            "$UPLOAD_URL?name=$ZIP" | jq -r '.browser_download_url'
+
+      # --- Publish plugin as pre-release to VSCode Marketplace (stessa logica) ---
       - name: Publish VSCode Plugin as pre-release
         working-directory: plugin
         run: npx @vscode/vsce publish --pre-release
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # --- Crea PR da pre-release verso main ---
+      # --- Crea PR da pre-release verso main (stessa logica) ---
       - name: Create PR to main
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
