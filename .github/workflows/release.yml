@@ -107,7 +107,12 @@ jobs:
             git tag -a $TAG -m "Release $TAG"
             git push origin $TAG
           fi
-
+      
+      # --- Install dependencies before publishing ---
+      - name: Install Node dependencies
+        working-directory: plugin-repo
+        run: npm ci
+        
       # --- Publish plugin to VSCode Marketplace ---
       - name: Publish VSCode Plugin as release
         working-directory: plugin-repo
