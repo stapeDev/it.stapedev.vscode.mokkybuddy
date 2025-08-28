@@ -3,7 +3,6 @@ name: Build & Pre-release MokkyBuddy VSCode Plugin
 on:
   push:
     branches:
-      - 'dependabot/**'
       - 'features/**'
       - 'feature/**'
 
