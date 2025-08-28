@@ -42,9 +42,10 @@ curl -L -H "Authorization: token $JAVA_APP_PAT" \
 
 echo "Downloaded JAR to $TARGET_FILE"
 
+# Passa in plugin e aggiungi il file con percorso relativo
 cd plugin
-
-git add "$TARGET_FILE"
+RELATIVE_PATH="${TARGET_FILE#plugin/}"  # rimuove 'plugin/' dal percorso
+git add "$RELATIVE_PATH"
 
 if git diff --cached --quiet; then
   echo "No changes in JAR to commit"
