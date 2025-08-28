@@ -77,7 +77,7 @@ jobs:
 
       # --- Carica l'artefatto per renderlo disponibile alla pipeline di release ---
       - name: Upload VSIX artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: vsix-artifact
           path: plugin/*.vsix

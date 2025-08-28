@@ -13,7 +13,7 @@ jobs:
     steps:
       # --- Scarica l'artefatto di build dalla pipeline di pre-release ---
       - name: Download VSIX artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: vsix-artifact
 
