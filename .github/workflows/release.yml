@@ -112,24 +112,22 @@ jobs:
           cd plugin-repo
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.artifact_version || '' }}
-          if [ -z "$RELEASE_VERSION" ]; then
-            echo "No release version available!"
-            exit 1
-          fi
-          RELEASE_BRANCH=release/$RELEASE_VERSION
 
-          if git show-ref --verify --quiet refs/heads/$RELEASE_BRANCH; then
-            git checkout $RELEASE_BRANCH
-          else
-            git checkout -b $RELEASE_BRANCH
-          fi
+          # Usa la versione dal package.json dell'artifact (o fallback)
+          RELEASE_VERSION=$(jq -r '.version' package.json)
+          RELEASE_BRANCH="release/$RELEASE_VERSION"
 
+          # Crea o passa al branch di release
+          git checkout -B $RELEASE_BRANCH
+
+          # Commit se ci sono modifiche
           if ! git diff --cached --quiet; then
-            git commit -m "Prepare release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
+            git add -A
+            git commit -m "Prepare release $RELEASE_VERSION [skip ci]"
           fi
 
-          git -c http.extraheader="AUTHORIZATION: bearer $TOKEN" push origin $RELEASE_BRANCH
+          # Push usando il token
+          git push https://x-access-token:$TOKEN@github.com/stapeDev/it.stapedev.vscode.mokkybuddy.git $RELEASE_BRANCH
 
       # --- Create release tag ---
       - name: Create release tag
@@ -137,16 +135,16 @@ jobs:
           TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT || secrets.GITHUB_TOKEN }}
         run: |
           cd plugin-repo
-          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.artifact_version }}
-          TAG=v$RELEASE_VERSION
+          RELEASE_VERSION=$(jq -r '.version' package.json)
+          TAG="v$RELEASE_VERSION"
 
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists locally"
-          else
+          # Crea tag solo se non esiste
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
             git tag -a "$TAG" -m "Release $TAG"
           fi
 
-          git -c http.extraheader="AUTHORIZATION: bearer $TOKEN" push origin "$TAG"
+          # Push tag
+          git push https://x-access-token:$TOKEN@github.com/stapeDev/it.stapedev.vscode.mokkybuddy.git $TAG
 
       # --- Install Node dependencies ---
       - name: Install Node dependencies
