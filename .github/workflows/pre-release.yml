@@ -87,12 +87,13 @@ jobs:
         if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/features/') }}
         run: |
           if gh pr list --base main --head ${{ github.ref_name }} --json number --jq '.[0].number' | grep -q .; then
-            echo "PR already exists, skip."
+            echo "PR from ${{ github.ref_name }} to main already exists, skip."
           else
             gh pr create \
               --base main \
               --head ${{ github.ref_name }} \
-              --title "Automated PR for feature branch ${{ github.ref_name }}"
+              --title "PR from feature branch ${{ github.ref_name }}" \
+              --body "This PR was automatically created from branch ${{ github.ref_name }}."
           fi
         env:
           GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
