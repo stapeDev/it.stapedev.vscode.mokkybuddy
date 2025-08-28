@@ -133,5 +133,6 @@ jobs:
               --head pre-release/$RELEASE_VERSION \
               --title "PR from pre-release/$RELEASE_VERSION to main" \
               --body "Automated pre-release PR from pre-release/$RELEASE_VERSION to main"
+          fi
         env:
           GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
