@@ -201,11 +201,11 @@ jobs:
       
       # --- Upload plugin artifact ---
       - name: Upload plugin artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: plugin-final
           path: plugin
-
+          
       # --- Pubblica plugin come pre-release su VSCode Marketplace ---
       - name: Publish VSCode Plugin as pre-release
         working-directory: plugin
