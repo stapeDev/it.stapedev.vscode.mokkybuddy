@@ -18,9 +18,9 @@ describe('Mokky Buddy Extension - No Regression', () => {
     // Mock configurazioni
     (vscode.workspace.getConfiguration as jest.Mock) = jest.fn().mockReturnValue({
       get: jest.fn().mockImplementation((key: string) => {
-        if (key === 'javaPath') return 'java';
-        if (key === 'serverPort') return 8081;
-        if (key === 'apiMode') return 'file';
+        if (key === 'javaPath') {return 'java';}
+        if (key === 'serverPort') {return 8081;}
+        if (key === 'apiMode') {return 'file';}
       }),
       update: jest.fn().mockResolvedValue(undefined),
     });
