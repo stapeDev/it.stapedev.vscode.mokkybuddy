@@ -26,12 +26,25 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      # --- Read version from main repository ---
-      - name: Read plugin version
+      # --- Fetch latest pre-release version ---
+      - name: Get latest pre-release version
         id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: stapeDev/it.stapedev.vscode.mokkybuddy
         run: |
-          VERSION=$(jq -r '.version' plugin-repo/package.json)
+          LATEST_PRERELEASE=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases" | jq -r '.[] | select(.prerelease==true) | .tag_name' | sort -V | tail -n1)
+
+          if [ -z "$LATEST_PRERELEASE" ]; then
+            echo "No pre-release found!"
+            exit 1
+          fi
+
+          VERSION="${LATEST_PRERELEASE%-pre}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Latest pre-release tag: $LATEST_PRERELEASE"
 
       # --- Download pre-release asset from GitHub Release ---
       - name: Download pre-release asset
@@ -40,14 +53,14 @@ jobs:
           REPO: stapeDev/it.stapedev.vscode.mokkybuddy
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          TAG=v${VERSION}-pre
-          echo "Fetching release for tag $TAG"
+          LATEST_TAG=v${VERSION}-pre
+          echo "Fetching release for tag $LATEST_TAG"
           RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases/tags/$TAG")
+            "https://api.github.com/repos/$REPO/releases/tags/$LATEST_TAG")
 
           ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
           if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-            echo "Asset not found for tag $TAG. Response:"
+            echo "Asset not found for tag $LATEST_TAG. Response:"
             echo "$RESP"
             exit 1
           fi
@@ -107,12 +120,12 @@ jobs:
             git tag -a $TAG -m "Release $TAG"
             git push origin $TAG
           fi
-      
+
       # --- Install dependencies before publishing ---
       - name: Install Node dependencies
         working-directory: plugin-repo
         run: npm ci
-        
+
       # --- Publish plugin to VSCode Marketplace ---
       - name: Publish VSCode Plugin as release
         working-directory: plugin-repo
