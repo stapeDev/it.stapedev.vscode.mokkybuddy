@@ -11,7 +11,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      # --- Checkout plugin repo ---
+      # --- Checkout repo ---
       - name: Checkout Plugin Repo
         uses: actions/checkout@v3
         with:
@@ -19,51 +19,33 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin-repo
 
-      # --- Find last successful pre-release run and download artifact ---
-      - name: Download latest pre-release artifact
+      # --- Download artifact dalla pre-release ---
+      - name: Download pre-release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-final
+          path: plugin-artifact
+
+      # --- Leggi versione dal package.json ---
+      - name: Read plugin version
+        id: version
         run: |
-          echo "Fetching last successful pre-release run..."
-          LATEST_RUN_ID=$(gh run list \
-            --workflow "Build & Pre-release MokkyBuddy VSCode Plugin" \
-            --branch $(git rev-parse --abbrev-ref HEAD) \
-            --status success \
-            --json databaseId \
-            --jq '.[0].databaseId')
+          VERSION=$(jq -r '.version' plugin-artifact/package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-          if [ -z "$LATEST_RUN_ID" ]; then
-            echo "No successful pre-release run found. Exiting."
-            exit 1
-          fi
-
-          echo "Latest run ID: $LATEST_RUN_ID"
-          gh run download $LATEST_RUN_ID --name plugin-final --dir plugin-artifact
-
-      # --- Copy artifact into repo ---
+      # --- Copia artifact nella repo ---
       - name: Copy artifact into repo
         run: |
           cp -R plugin-artifact/* plugin-repo/
           cd plugin-repo
           git add -A
 
-      # --- Determine plugin version ---
-      - name: Determine plugin version
-        id: version
-        run: |
-          cd plugin-repo
-          VERSION=$(jq -r '.version' package.json)
-          if [ -z "$VERSION" ]; then
-            echo "Version is empty! Exiting."
-            exit 1
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      # --- Create release branch ---
+      # --- Crea branch release ---
       - name: Create release branch
         run: |
           cd plugin-repo
           RELEASE_BRANCH=release/${{ steps.version.outputs.version }}
           if git show-ref --verify --quiet refs/heads/$RELEASE_BRANCH; then
-            echo "Branch $RELEASE_BRANCH already exists, using existing branch"
             git checkout $RELEASE_BRANCH
           else
             git checkout -b $RELEASE_BRANCH
@@ -73,19 +55,19 @@ jobs:
             git push origin $RELEASE_BRANCH
           fi
 
-      # --- Create release tag ---
+      # --- Crea tag release ---
       - name: Create release tag
         run: |
           cd plugin-repo
           TAG=v${{ steps.version.outputs.version }}
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists, skipping creation"
+            echo "Tag $TAG already esiste, skip"
           else
             git tag -a $TAG -m "Release $TAG"
             git push origin $TAG
           fi
 
-      # --- Publish VSCode Plugin as release ---
+      # --- Pubblica plugin sul Marketplace ---
       - name: Publish VSCode Plugin as release
         working-directory: plugin-repo
         run: npx @vscode/vsce publish
