@@ -52,7 +52,7 @@ git config user.email "github-actions@github.com"
 # Verifica branch corrente
 CURRENT_BRANCH=$(git branch --show-current)
 if [ "$CURRENT_BRANCH" = "main" ]; then
-  FEATURE_BRANCH="update-jar-$JAVA_VERSION"
+  FEATURE_BRANCH="features/update-jar-$JAVA_VERSION"
   echo "On main branch, creating feature branch $FEATURE_BRANCH"
   git checkout -b "$FEATURE_BRANCH"
 else
