@@ -161,32 +161,21 @@ jobs:
             git push origin "$CURRENT_BRANCH" --force
           fi
 
-      # --- Create/update pre-release branch allineato a main e cherry-pick dei commit del branch corrente ---
-      - name: Create/update pre-release branch
+      # --- Crea branch pre-release a partire dal branch corrente ---
+      - name: Create pre-release branch
         working-directory: plugin
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
           CURRENT_BRANCH=${GITHUB_REF_NAME}
-          
-          # Fetch main
-          git fetch origin main
-          
-          # Crea/aggiorna branch pre-release da main
-          git checkout -B pre-release/$VERSION origin/main
-          
-          # Trova i commit del branch corrente non ancora in main
-          COMMITS=$(git log origin/main..origin/$CURRENT_BRANCH --reverse --format="%H")
-          
-          if [ -n "$COMMITS" ]; then
-            echo "Cherry-picking commits from $CURRENT_BRANCH to pre-release/$VERSION"
-            git cherry-pick $COMMITS || echo "Conflitti risolti manualmente o ignorati"
-          else
-            echo "Nessun commit da cherry-pick"
-          fi
-          
-          # Push branch pre-release
-          git push origin pre-release/$VERSION --force
 
+          # Fetch del branch corrente
+          git fetch origin $CURRENT_BRANCH
+
+          # Crea branch pre-release da quello corrente
+          git checkout -B pre-release/$VERSION origin/$CURRENT_BRANCH
+          git push origin pre-release/$VERSION --force-with-lease
+
+      # --- Crea tag pre-release ---
       - name: Create pre-release tag
         working-directory: plugin
         run: |
@@ -194,19 +183,20 @@ jobs:
           git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
           git push origin v$VERSION-pre --force
 
+      # --- Pubblica plugin come pre-release su VSCode Marketplace ---
       - name: Publish VSCode Plugin as pre-release
         working-directory: plugin
         run: npx @vscode/vsce publish --pre-release
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # --- Crea PR verso il branch corrente dal pre-release ---
+      # --- Crea PR da pre-release verso main ---
       - name: Create PR to main
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          base: main                  # il branch di destinazione
-          branch: pre-release/${{ steps.set_version.outputs.version }}  # il branch sorgente
+          base: main
+          branch: pre-release/${{ steps.set_version.outputs.version }}
           title: "Pre-release ${{ steps.set_version.outputs.version }}"
           body: "This is an automated pre-release PR from the pre-release branch to main."
           path: plugin
