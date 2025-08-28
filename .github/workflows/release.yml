@@ -19,7 +19,7 @@ jobs:
         # Il token è fornito automaticamente dall'ambiente di GitHub Actions.
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
 
       # --- Configura l'identità Git ---
       - name: Configure Git identity
