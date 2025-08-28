@@ -106,15 +106,20 @@ jobs:
           }
 
           if echo "$COMMITS" | grep -q 'BREAKING CHANGE'; then
+            echo "BREAKING CHANGE trovata, incremento MAJOR"
             npm version major --no-git-tag-version
           elif echo "$COMMITS" | grep -q '^feat'; then
+            echo "Commits feature trovati, incremento MINOR"
             npm version minor --no-git-tag-version
           elif echo "$COMMITS" | grep -q '^fix'; then
+            echo "Commits fix trovati, incremento PATCH"
             npm version patch --no-git-tag-version
           else
             if semver_gt "$JAVA_VERSION" "$CURRENT_VERSION"; then
+              echo "Allineiamo alla versione Java App $JAVA_VERSION"
               npm version $JAVA_VERSION --no-git-tag-version
             else
+              echo "Incrementiamo PATCH di default"
               npm version patch --no-git-tag-version
             fi
           fi
@@ -152,11 +157,12 @@ jobs:
           mv CHANGELOG.new CHANGELOG.md
           rm -f "$TMP"
 
-      # --- Imposta VERSION come output ---
+      # --- Imposta VERSION come output (version aggiornata dal passo precedente) ---
       - name: Set VERSION output
         id: set_version
+        working-directory: plugin
         run: |
-          VERSION=$(jq -r '.version' plugin/package.json)
+          VERSION=$(jq -r '.version' package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # --- Commit e pre-release (stessa logica) ---
@@ -172,44 +178,89 @@ jobs:
             git push origin "$CURRENT_BRANCH" --force
           fi
 
-      # --- Crea branch pre-release (stessa logica) ---
+      # --- Compute release_version checking Marketplace (increment patch if exists) ---
+      - name: Compute release version
+        id: compute_release_version
+        working-directory: plugin
+        run: |
+          EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
+          CURRENT_VERSION=$(jq -r '.version' package.json)
+          echo "Current version: $CURRENT_VERSION"
+          # get existing versions from Marketplace (one per line)
+          EXISTING=$(npx @vscode/vsce show "$EXTENSION_ID" --json | jq -r '.versions[]?' || true)
+          RELEASE_VERSION="$CURRENT_VERSION"
+
+          # increment patch while it exists on marketplace
+          while echo "$EXISTING" | grep -qx "$RELEASE_VERSION"; do
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
+            PATCH=$((PATCH+1))
+            RELEASE_VERSION="$MAJOR.$MINOR.$PATCH"
+          done
+
+          echo "Computed release_version=$RELEASE_VERSION"
+          echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+
+          # update package.json to release_version
+          jq --arg v "$RELEASE_VERSION" '.version=$v' package.json > package.tmp.json
+          mv package.tmp.json package.json
+
+          # update vss-extension.json if present
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$RELEASE_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
+          fi
+
+      # --- Create pre-release branch (from current branch) ---
       - name: Create pre-release branch
         working-directory: plugin
         run: |
-          VERSION=${{ steps.set_version.outputs.version }}
+          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
           CURRENT_BRANCH=${GITHUB_REF_NAME}
           git fetch origin $CURRENT_BRANCH
-          git checkout -B pre-release/$VERSION origin/$CURRENT_BRANCH
-          git push origin pre-release/$VERSION --force-with-lease
+          git checkout -B pre-release/$RELEASE_VERSION origin/$CURRENT_BRANCH
+          git add -A
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          if ! git diff --cached --quiet; then
+            git commit -m "Prepare pre-release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
+          fi
+          git push origin pre-release/$RELEASE_VERSION --force-with-lease
 
-      # --- Crea tag pre-release (stessa logica) ---
+      # --- Create Git tag for pre-release (v<release_version>-pre) and push ---
       - name: Create pre-release tag
         working-directory: plugin
         run: |
-          VERSION=${{ steps.set_version.outputs.version }}
-          git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
-          git push origin v$VERSION-pre --force
+          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
+          TAG=v${RELEASE_VERSION}-pre
+          # create / force update tag
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            git tag -f "$TAG" -m "Pre-release $RELEASE_VERSION"
+          else
+            git tag -a "$TAG" -m "Pre-release $RELEASE_VERSION"
+          fi
+          git push origin "$TAG" --force
 
-      # --- Zip plugin and upload as GitHub Release asset (NEW) ---
+      # --- Zip plugin artifact (create zip in workspace root) ---
       - name: Zip plugin artifact
+        working-directory: plugin
         run: |
-          VERSION=${{ steps.set_version.outputs.version }}
-          ZIP=plugin-$VERSION.zip
-          cd plugin
-          zip -r ../$ZIP .
-          cd ..
+          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
+          ZIP=plugin-$RELEASE_VERSION.zip
+          zip -r "../$ZIP" .
+          ls -la "../$ZIP"
 
+      # --- Create GitHub pre-release and upload asset ---
       - name: Create GitHub pre-release and upload asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: stapeDev/it.stapedev.vscode.mokkybuddy
-          VERSION: ${{ steps.set_version.outputs.version }}
+          RELEASE_VERSION: ${{ steps.compute_release_version.outputs.release_version }}
         run: |
-          TAG=v$VERSION-pre
-          PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $VERSION" '{"tag_name":$tag,"name":$name,"body":$body,"prerelease":true}')
+          TAG=v${RELEASE_VERSION}-pre
+          PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $RELEASE_VERSION" \
+            '{tag_name: $tag, name: $name, body: $body, prerelease: true}')
           echo "$PAYLOAD" > /tmp/release_payload.json
 
-          # Create release
           RESP=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases" -d @/tmp/release_payload.json)
 
@@ -220,7 +271,7 @@ jobs:
             exit 1
           fi
 
-          ZIP=plugin-$VERSION.zip
+          ZIP=plugin-${RELEASE_VERSION}.zip
           UPLOAD_URL_EXPANDED="${UPLOAD_URL%\{*}?name=$ZIP"
           echo "Uploading $ZIP to $UPLOAD_URL_EXPANDED"
           curl -s --data-binary @"$ZIP" \
@@ -228,25 +279,55 @@ jobs:
               -H "Content-Type: application/zip" \
               "$UPLOAD_URL_EXPANDED" | jq -r '.browser_download_url'
 
-      # --- Publish plugin as pre-release to VSCode Marketplace (stessa logica) ---
-      - name: Publish VSCode Plugin as pre-release
+      # --- Ensure dependencies for packaging & publish to Marketplace (publish the RELEASE_VERSION) ---
+      - name: Publish VSCode Plugin (release version)
         working-directory: plugin
-        run: npx @vscode/vsce publish --pre-release
+        run: |
+          npm ci
+          echo "Publishing version: $(jq -r '.version' package.json)"
+          npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # --- Crea PR da pre-release verso main (stessa logica) ---
+      # --- After successful publish: bump package.json to next patch and push to pre-release branch ---
+      - name: Bump package.json to next patch and push to pre-release branch
+        working-directory: plugin
+        run: |
+          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
+          NEXT_PATCH=$((PATCH+1))
+          NEXT_VERSION="$MAJOR.$MINOR.$NEXT_PATCH"
+          echo "Bumping package.json to next version: $NEXT_VERSION"
+
+          jq --arg v "$NEXT_VERSION" '.version=$v' package.json > package.tmp.json
+          mv package.tmp.json package.json
+
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$NEXT_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
+          fi
+
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add package.json vss-extension.json || git add package.json || true
+          git commit -m "Bump version to $NEXT_VERSION after pre-release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
+
+          # ensure branch exists and push the bumped version there
+          git checkout -B pre-release/$RELEASE_VERSION
+          git push origin pre-release/$RELEASE_VERSION --force-with-lease
+
+      # --- Create PR from pre-release/<release_version> -> main ---
       - name: Create PR to main
         run: |
-          VERSION=${{ steps.set_version.outputs.version }}
-          if gh pr list --base main --head pre-release/$VERSION --json number --jq '.[0].number' | grep -q .; then
-            echo "PR da pre-release/$VERSION a main esiste già, skip."
+          RELEASE_VERSION=${{ steps.compute_release_version.outputs.release_version }}
+          if gh pr list --base main --head pre-release/$RELEASE_VERSION --json number --jq '.[0].number' | grep -q .; then
+            echo "PR from pre-release/$RELEASE_VERSION to main already exists, skip."
           else
             gh pr create \
               --base main \
-              --head pre-release/$VERSION \
-              --title "PR from pre-release/$VERSION to main." \
-              --body "Automated pre-release PR from pre-release/$VERSION to main."
+              --head pre-release/$RELEASE_VERSION \
+              --title "PR from pre-release/$RELEASE_VERSION to main." \
+              --body "Automated pre-release PR from pre-release/$RELEASE_VERSION to main."
           fi
         env:
           GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
