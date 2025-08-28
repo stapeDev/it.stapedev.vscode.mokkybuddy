@@ -1,12 +1,11 @@
-# File: .github/workflows/pre-release.yml
-
 name: Build & Pre-release MokkyBuddy VSCode Plugin
-
 permissions:
   contents: write
   pull-requests: write
 
 on:
+  repository_dispatch:
+    types: [trigger-plugin-pre-release-build]
   push:
     branches:
       - 'features/**'
@@ -29,22 +28,16 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
-          ref: main
+          ref: ${{ github.event.client_payload.branch || 'main' }}
           token: ${{ secrets.JAVA_APP_PAT }}
           path: app
           fetch-depth: 0
 
-      # --- Setup ambiente ---
+      # --- Setup Node ---
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
-
-      # --- Installazione GitHub CLI ---
-      - name: Install GitHub CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install gh -y
 
       # --- Recupero versione Java App ---
       - name: Get Java App version
@@ -53,156 +46,268 @@ jobs:
           VERSION=$(mvn -f app/pom.xml help:evaluate -Dexpression=project.version -q -DforceStdout)
           VERSION_CLEAN=${VERSION/-SNAPSHOT/}
           echo "java_version_clean=$VERSION_CLEAN" >> $GITHUB_OUTPUT
-          echo "Found Java App version: $VERSION_CLEAN"
 
-      # --- Download JAR da GitHub Release ---
+      # --- Download JAR (come prima) ---
       - name: Download JAR artifact from Java App release
         env:
           JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
           VERSION: ${{ steps.get_java_version.outputs.java_version_clean }}
         run: |
           REPO="stapeDev/it.stapedev.api.mokkybuddy"
-          TARGET_DIR="plugin/resources"
-          TARGET_FILE="$TARGET_DIR/mokkyBuddyAPI.jar"
-          mkdir -p "$TARGET_DIR"
+          TARGET_DIR=plugin/resources
+          TARGET_FILE=$TARGET_DIR/mokkyBuddyAPI.jar
+          mkdir -p $TARGET_DIR
 
-          echo "Downloading JAR for version v$VERSION"
           RELEASE_ID=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
-            -H "Accept: application/vnd.github.com/v3+json" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases/tags/v$VERSION" \
             | jq -r '.id')
-          
+
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" == "null" ]; then
-            echo "Release 'v$VERSION' non trovata. Controlla che il tag esista nel repository di Java App."
+            echo "Release not found!"
             exit 1
           fi
 
           ASSET_URL=$(curl -s -H "Authorization: token $JAVA_APP_PAT" \
-            -H "Accept: application/vnd.github.com/v3+json" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases/$RELEASE_ID/assets" \
             | jq -r '.[] | select(.name | endswith(".jar")) | .url')
-
-          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" == "null" ]; then
-            echo "Asset JAR non trovato per la release 'v$VERSION'."
-            exit 1
-          fi
 
           curl -L -H "Authorization: token $JAVA_APP_PAT" \
             -H "Accept: application/octet-stream" \
             "$ASSET_URL" -o "$TARGET_FILE"
-          
-          echo "JAR scaricato in $TARGET_FILE"
 
-      # --- Installazione dipendenze e test del Plugin ---
-      - name: Install Plugin dependencies
+      # --- Installa dipendenze e test ---
+      - name: Install dependencies
         working-directory: plugin
-        run: npm ci
+        run: npm install
 
-      - name: Run Plugin tests
+      - name: Run tests
         working-directory: plugin
         run: npm test
 
-      # --- Aggiorna versione plugin e documentazione ---
-      - name: Update plugin version and documentation
+      # --- Aggiorna versione plugin basata su commit e Java App (stessa logica) ---
+      - name: Update plugin version based on commits
         working-directory: plugin
-        id: update_version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CURRENT_VERSION=$(jq -r '.version' package.json)
           JAVA_VERSION=${{ steps.get_java_version.outputs.java_version_clean }}
+          EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
+
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          RANGE=${LAST_TAG:+$LAST_TAG..HEAD}
+          COMMITS=$(git log $RANGE --pretty=format:"%s%b" || true)
+
+          echo "Commits to analyze:"
+          echo "$COMMITS"
 
           semver_gt() {
             [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
           }
-          
-          BUMP_TYPE="patch"
-          if git log --pretty=oneline --since="2 days ago" | grep -q "feat"; then
-            BUMP_TYPE="minor"
-          elif git log --pretty=oneline --since="2 days ago" | grep -q "BREAKING CHANGE"; then
-            BUMP_TYPE="major"
-          fi
-          
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
 
-          if [ $((MINOR % 2)) -eq 0 ]; then
-            NEW_MINOR=$((MINOR + 1))
-            NEW_PATCH=0
+          if echo "$COMMITS" | grep -q 'BREAKING CHANGE'; then
+            echo "BREAKING CHANGE trovata, incremento MAJOR"
+            npm version major --no-git-tag-version
+          elif echo "$COMMITS" | grep -q '^feat'; then
+            echo "Commits feature trovati, incremento MINOR"
+            npm version minor --no-git-tag-version
+          elif echo "$COMMITS" | grep -q '^fix'; then
+            echo "Commits fix trovati, incremento PATCH"
+            npm version patch --no-git-tag-version
           else
-            NEW_MINOR=$MINOR
-            NEW_PATCH=$((PATCH + 1))
+            if semver_gt "$JAVA_VERSION" "$CURRENT_VERSION"; then
+              echo "Allineiamo alla versione Java App $JAVA_VERSION"
+              npm version $JAVA_VERSION --no-git-tag-version
+            else
+              echo "Incrementiamo PATCH di default"
+              npm version patch --no-git-tag-version
+            fi
           fi
 
-          NEW_VERSION="$MAJOR.$NEW_MINOR.$NEW_PATCH"
-
-          if semver_gt "$JAVA_VERSION" "$NEW_VERSION"; then
-            echo "Allineiamo alla versione Java App $JAVA_VERSION"
-            NEW_VERSION=$JAVA_VERSION
-          else
-            echo "Non ci sono differenze di versione, facciamo un bump $BUMP_TYPE"
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$(jq -r '.version' package.json)" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
           fi
 
-          # Usa un approccio più sicuro per l'aggiornamento JSON
-          jq ".version = \"$NEW_VERSION\"" package.json > temp_package.json && mv temp_package.json package.json
-          jq ".version = \"$NEW_VERSION\"" vss-extension.json > temp_vss.json && mv temp_vss.json vss-extension.json
-          
-          sed -i "s|Java App v[0-9]\+\.[0-9]\+\.[0-9]\+|Java App v${JAVA_VERSION}|g" README.md
-          
-          LAST_TAG=$(git describe --tags --abbrev=0)
-          COMMITS=$(git log --pretty=format:"- %s" ${LAST_TAG}..HEAD)
-
-          echo -e "$COMMITS\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
-          
-          FEATURES=$(echo "$COMMITS" | grep "feat\|BREAKING CHANGE")
-          if [ -n "$FEATURES" ]; then
-            echo -e "$FEATURES\n\n$(cat features.md)" > features.md
-          fi
-          
-          echo "RELEASE_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
-      
-      # --- Creazione tag, commit e push ---
-      - name: Create tag, commit, and push
+      # --- Compute base and alpha versions (alpha = base + "-alpha") ---  # <<< NEW >>>
+      - name: Compute base and alpha versions
+        id: compute_versions
         working-directory: plugin
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NEW_VERSION=${{ steps.update_version.outputs.RELEASE_VERSION }}
-          TAG_NAME="v${NEW_VERSION}-pre"
-          BRANCH_NAME="pre-release-v$NEW_VERSION"
+          BASE_VERSION=$(jq -r '.version' package.json)
+          ALPHA_VERSION="${BASE_VERSION}-alpha"
+          echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "alpha_version=$ALPHA_VERSION" >> $GITHUB_OUTPUT
+          echo "Computed BASE_VERSION=$BASE_VERSION and ALPHA_VERSION=$ALPHA_VERSION"
 
+      # --- Apply alpha version to package.json and vss-extension.json ---  # <<< NEW >>>
+      - name: Apply alpha version
+        working-directory: plugin
+        run: |
+          ALPHA_VERSION=${{ steps.compute_versions.outputs.alpha_version }}
+          echo "Applying alpha version: $ALPHA_VERSION"
+          # Use npm to set version (no tag)
+          npm version "$ALPHA_VERSION" --no-git-tag-version
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$ALPHA_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
+          fi
+
+      # --- Update docs (use alpha version for badges) ---
+      - name: Update docs
+        working-directory: plugin
+        run: |
+          VERSION=${{ steps.compute_versions.outputs.alpha_version }}
+          sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
+
+          cd ../app
+          git fetch --tags --prune || true
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          RANGE=${LAST_TAG:+$LAST_TAG..HEAD}
+          FEATS=$(git log $RANGE --grep '^feat' --pretty=format:"- %s (%an)" --reverse || true)
+          FIXES=$(git log $RANGE --grep '^fix' --pretty=format:"- %s (%an)" --reverse || true)
+          CHORES=$(git log $RANGE --grep '^chore' --pretty=format:"- %s (%an)" --reverse || true)
+          BREAKING=$(git log $RANGE --grep 'BREAKING CHANGE' --pretty=format:"- %s (%an)" --reverse || true)
+          cd ../plugin
+
+          [ ! -f CHANGELOG.md ] && echo "# Changelog" > CHANGELOG.md
+          TMP=$(mktemp)
+          echo "## Version ${VERSION} ($(date +'%Y-%m-%d'))" >> "$TMP"
+          [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> "$TMP"
+          [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
+          [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
+          [ -n "$BREAKING" ] && echo -e "\n### BREAKING CHANGES\n$BREAKING" >> "$TMP"
+          cat "$TMP" CHANGELOG.md > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+          rm -f "$TMP"
+
+      # --- Set VERSION output (alpha) and BASE output ---  # <<< NEW >>>
+      - name: Set VERSION output
+        id: set_version
+        run: |
+          echo "version=${{ steps.compute_versions.outputs.alpha_version }}" >> $GITHUB_OUTPUT
+          echo "base_version=${{ steps.compute_versions.outputs.base_version }}" >> $GITHUB_OUTPUT
+
+      # --- Commit alpha version on current branch ---
+      - name: Commit alpha version
+        working-directory: plugin
+        run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          
-          # Controlla se ci sono modifiche da committare
-          if [[ $(git status --porcelain) ]]; then
-            git add resources/mokkyBuddyAPI.jar package.json vss-extension.json README.md CHANGELOG.md features.md
-            git commit -m "chore(pre-release): Update to v$NEW_VERSION"
+
+          # Recuperiamo l'alpha version dall'output del passo compute_versions
+          ALPHA_VERSION="${{ steps.compute_versions.outputs.alpha_version }}"
+
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Set pre-release alpha version $ALPHA_VERSION [skip ci]" || echo "No changes to commit"
           else
-            echo "Nessuna modifica da committare, si salta il commit."
+            echo "No changes to commit"
           fi
 
-          git tag $TAG_NAME -a -m "Pre-release tag for v$NEW_VERSION"
-          git checkout -b "$BRANCH_NAME"
-          git push -u origin "$BRANCH_NAME"
-          git push --tags
-          
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          # Push commit to the source branch (silently ignore failure)
+          git push origin HEAD || true
 
-      # --- Creazione Pull Request ---
-      - name: Create Pull Request
+      # --- Create pre-release tag (tag is the alpha version) ---
+      - name: Create pre-release tag
         working-directory: plugin
+        run: |
+          VERSION=${{ steps.compute_versions.outputs.alpha_version }}
+          TAG=v$VERSION
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG exists, forcing update"
+            git tag -f $TAG -m "Pre-release $VERSION"
+          else
+            git tag -a $TAG -m "Pre-release $VERSION"
+          fi
+          git push origin $TAG --force
+
+      # --- Zip plugin artifact (fixed) ---
+      - name: Zip plugin artifact
+        working-directory: plugin
+        run: |
+          VERSION=${{ steps.compute_versions.outputs.alpha_version }}
+          ZIP=plugin-$VERSION.zip
+          # zip the current folder content into ../$ZIP
+          zip -r "../$ZIP" .
+          # list the created zip to verify
+          ls -la "../$ZIP"
+
+      # --- Create GitHub pre-release and upload asset (alpha) ---
+      - name: Create GitHub pre-release and upload asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH_NAME: ${{ steps.create_tag_commit_push.outputs.BRANCH_NAME }}
+          REPO: stapeDev/it.stapedev.vscode.mokkybuddy
+          VERSION: ${{ steps.compute_versions.outputs.alpha_version }}
         run: |
-          gh pr create --base main --head "$BRANCH_NAME" \
-            --title "chore(pre-release): v${{ steps.update_version.outputs.RELEASE_VERSION }}" \
-            --body "Aggiorna il branch \`main\` per la pre-release del plugin MokkyBuddy v${{ steps.update_version.outputs.RELEASE_VERSION }}."
+          TAG=v${VERSION}
+          PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $VERSION" '{"tag_name":$tag,"name":$name,"body":$body,"prerelease":true}')
+          echo "$PAYLOAD" > /tmp/release_payload.json
 
-      # --- Pubblicazione su Marketplace (pre-release) ---
-      - name: Publish VSCode Plugin (pre-release)
+          # Create release
+          RESP=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/releases" -d @/tmp/release_payload.json)
+
+          UPLOAD_URL=$(echo "$RESP" | jq -r '.upload_url')
+          if [ -z "$UPLOAD_URL" ] || [ "$UPLOAD_URL" = "null" ]; then
+            echo "Failed to create release. Response:"
+            echo "$RESP"
+            exit 1
+          fi
+
+          ZIP=plugin-${VERSION}.zip
+          UPLOAD_URL_EXPANDED="${UPLOAD_URL%\{*}?name=$ZIP"
+          echo "Uploading $ZIP to $UPLOAD_URL_EXPANDED"
+          curl -s --data-binary @"$ZIP" \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/zip" \
+              "$UPLOAD_URL_EXPANDED" | jq -r '.browser_download_url'
+
+      # --- Publish plugin as pre-release to VSCode Marketplace ---
+      - name: Publish VSCode Plugin as pre-release
         working-directory: plugin
         run: |
+          npm install  # ensure dependencies like typescript are available for package scripts
           npx @vscode/vsce publish --pre-release
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      # --- Create pre-release branch containing base (clean) version ---
+      - name: Create pre-release branch with base version
+        working-directory: plugin
+        run: |
+          BASE_VERSION=${{ steps.compute_versions.outputs.base_version }}
+          CURRENT_BRANCH=${GITHUB_REF_NAME}
+          git fetch origin $CURRENT_BRANCH
+          # create branch from origin/current branch
+          git checkout -B pre-release/$BASE_VERSION origin/$CURRENT_BRANCH
+
+          # restore base version in new branch
+          npm version $BASE_VERSION --no-git-tag-version || true
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$BASE_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
+          fi
+
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Restore base version $BASE_VERSION for pre-release branch [skip ci]" || echo "No changes to commit"
+          fi
+          git push origin pre-release/$BASE_VERSION --force-with-lease
+
+      # --- Create PR from pre-release/{base_version} -> main ---
+      - name: Create PR to main
+        run: |
+          VERSION=${{ steps.compute_versions.outputs.base_version }}
+          if gh pr list --base main --head pre-release/$VERSION --json number --jq '.[0].number' | grep -q .; then
+            echo "PR from pre-release/$VERSION to main already exists, skip."
+          else
+            gh pr create \
+              --base main \
+              --head pre-release/$VERSION \
+              --title "PR from pre-release/$VERSION to main." \
+              --body "Automated pre-release PR from pre-release/$VERSION to main."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
+          GH_REPO: stapeDev/it.stapedev.vscode.mokkybuddy
