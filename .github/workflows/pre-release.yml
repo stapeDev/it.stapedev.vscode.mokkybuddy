@@ -194,14 +194,18 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
-          CURRENT_BRANCH=${GITHUB_REF_NAME}
+
+          # Recuperiamo l'alpha version dall'output del passo compute_versions
+          ALPHA_VERSION="${{ steps.compute_versions.outputs.alpha_version }}"
+
           git add -A
           if ! git diff --cached --quiet; then
-            git commit -m "Set pre-release alpha version ${ { steps.compute_versions.outputs.alpha_version } } [skip ci]" || echo "No changes to commit"
+            git commit -m "Set pre-release alpha version $ALPHA_VERSION [skip ci]" || echo "No changes to commit"
           else
             echo "No changes to commit"
           fi
-          # Push commit to the source branch
+
+          # Push commit to the source branch (silently ignore failure)
           git push origin HEAD || true
 
       # --- Create pre-release tag (tag is the alpha version) ---
