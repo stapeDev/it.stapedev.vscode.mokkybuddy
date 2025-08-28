@@ -218,6 +218,7 @@ jobs:
               --head pre-release/$VERSION \
               --title "PR from pre-release/$VERSION to main." \
               --body "Automated pre-release PR from pre-release/$VERSION to main."
+          fi
         env:
           GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
           GH_REPO: stapeDev/it.stapedev.vscode.mokkybuddy
