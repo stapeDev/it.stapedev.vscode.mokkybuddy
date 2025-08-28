@@ -93,45 +93,45 @@ jobs:
           plugin/.github/scripts/update-changelog.sh
 
   release:
-  runs-on: ubuntu-latest
-  needs: versioning
-  steps:
-    - uses: actions/checkout@v3
-      with:
-        path: plugin
-        fetch-depth: 0
+    runs-on: ubuntu-latest
+    needs: versioning
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          path: plugin
+          fetch-depth: 0
 
-    # Create branch/tag pre-release
-    - name: Create branch/tag/pre-release
-      run: |
-        chmod +x plugin/.github/scripts/create-prerelease.sh
-        plugin/.github/scripts/create-prerelease.sh ${{ needs.versioning.outputs.release_version }}
+      # Create branch/tag pre-release
+      - name: Create branch/tag/pre-release
+        run: |
+          chmod +x plugin/.github/scripts/create-prerelease.sh
+          plugin/.github/scripts/create-prerelease.sh ${{ needs.versioning.outputs.release_version }}
 
-    # Publish pre-release su Marketplace (usando versione aggiornata)
-    - name: Publish Marketplace pre-release
-      run: |
-        chmod +x plugin/.github/scripts/publish-prerelease.sh
-        plugin/.github/scripts/publish-prerelease.sh ${{ needs.versioning.outputs.release_version }}
-      env:
-        VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      # Publish pre-release su Marketplace (usando versione aggiornata)
+      - name: Publish Marketplace pre-release
+        run: |
+          chmod +x plugin/.github/scripts/publish-prerelease.sh
+          plugin/.github/scripts/publish-prerelease.sh ${{ needs.versioning.outputs.release_version }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-    # Post-release bump & push su branch pre-release
-    - name: Post-release bump
-      run: |
-        chmod +x plugin/.github/scripts/post-release-bump.sh
-        plugin/.github/scripts/post-release-bump.sh ${{ needs.versioning.outputs.release_version }}
+      # Post-release bump & push su branch pre-release
+      - name: Post-release bump
+        run: |
+          chmod +x plugin/.github/scripts/post-release-bump.sh
+          plugin/.github/scripts/post-release-bump.sh ${{ needs.versioning.outputs.release_version }}
 
-    # Crea PR dal branch pre-release verso main
-    - name: Create PR to main
-      run: |
-        RELEASE_VERSION=${{ needs.versioning.outputs.release_version }}
-        if gh pr list --base main --head pre-release/$RELEASE_VERSION --json number --jq '.[0].number' | grep -q .; then
-          echo "PR from pre-release/$RELEASE_VERSION to main already exists, skip."
-        else
-          gh pr create \
-            --base main \
-            --head pre-release/$RELEASE_VERSION \
-            --title "PR from pre-release/$RELEASE_VERSION to main" \
-            --body "Automated pre-release PR from pre-release/$RELEASE_VERSION to main"
-      env:
-        GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
+      # Crea PR dal branch pre-release verso main
+      - name: Create PR to main
+        run: |
+          RELEASE_VERSION=${{ needs.versioning.outputs.release_version }}
+          if gh pr list --base main --head pre-release/$RELEASE_VERSION --json number --jq '.[0].number' | grep -q .; then
+            echo "PR from pre-release/$RELEASE_VERSION to main already exists, skip."
+          else
+            gh pr create \
+              --base main \
+              --head pre-release/$RELEASE_VERSION \
+              --title "PR from pre-release/$RELEASE_VERSION to main" \
+              --body "Automated pre-release PR from pre-release/$RELEASE_VERSION to main"
+        env:
+          GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
