@@ -54,6 +54,8 @@ jobs:
         run: |
           chmod +x plugin/.github/scripts/download-jar.sh
           plugin/.github/scripts/download-jar.sh ${{ steps.get_java.outputs.version }}
+        env:
+          JAVA_APP_PAT: ${{ secrets.JAVA_APP_PAT }}
 
       # Install & test plugin
       - run: npm ci
