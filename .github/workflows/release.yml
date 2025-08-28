@@ -1,4 +1,5 @@
 name: Release MokkyBuddy VSCode Plugin
+# Concedi i permessi di scrittura al job per poter creare branch e tag.
 permissions:
   contents: write
 
@@ -9,27 +10,39 @@ on:
 
 jobs:
   release:
+    # Esegui il job su un runner di Ubuntu.
     runs-on: ubuntu-latest
     steps:
-      # --- Checkout repo principale ---
+      # --- Checkout del repository principale ---
       - name: Checkout Plugin Repo
+        # Usa actions/checkout per clonare il repository.
+        # Il token è fornito automaticamente dall'ambiente di GitHub Actions.
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- Configure Git identity ---
+      # --- Configura l'identità Git ---
       - name: Configure Git identity
+        # Imposta l'utente e l'email per i commit futuri.
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      # --- Fetch latest pre-release tag and derive ARTIFACT_VERSION (fallback) ---
+      # --- Installa le dipendenze (curl, jq) ---
+      - name: Install dependencies
+        # Aggiorna e installa jq e curl necessari per le API.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+
+      # --- Ottieni la versione più recente della pre-release ---
       - name: Get latest pre-release version
         id: version
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: stapeDev/it.stapedev.vscode.mokkybuddy
         run: |
+          # Usa l'API di GitHub per trovare la pre-release più recente.
           LATEST_PRERELEASE_TAG=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases" \
@@ -40,6 +53,7 @@ jobs:
             exit 1
           fi
 
+          # Estrai la versione pulita dal tag.
           ARTIFACT_VERSION="${LATEST_PRERELEASE_TAG#v}"
           ARTIFACT_VERSION="${ARTIFACT_VERSION%-pre}"
 
@@ -47,7 +61,7 @@ jobs:
           echo "latest_prerelease_tag=$LATEST_PRERELEASE_TAG" >> $GITHUB_OUTPUT
           echo "Found latest pre-release tag: $LATEST_PRERELEASE_TAG -> artifact_version=$ARTIFACT_VERSION"
 
-      # --- Download pre-release asset ---
+      # --- Scarica l'asset della pre-release ---
       - name: Download pre-release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,6 +75,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases/tags/$LATEST_TAG")
 
+          # Trova l'URL dell'asset zip dal JSON della risposta.
           ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' || true)
           if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
             echo "Asset not found for tag $LATEST_TAG. Response:"
@@ -70,6 +85,7 @@ jobs:
 
           FNAME=plugin-${VERSION}.zip
           echo "Downloading asset $FNAME from $ASSET_URL"
+          # Scarica il file zip usando il token.
           curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
             "$ASSET_URL" -o "$FNAME"
 
@@ -77,7 +93,7 @@ jobs:
           unzip -o "$FNAME" -d plugin-artifact
           echo "Unzipped artifact into plugin-artifact/"
 
-      # --- Read plugin version (artifact fallback) ---
+      # --- Leggi la versione del plugin dall'artifact scaricato ---
       - name: Read plugin version
         id: version_artifact
         run: |
@@ -88,17 +104,17 @@ jobs:
             echo "version_artifact=" >> $GITHUB_OUTPUT
           fi
 
-      # --- Copy artifact into repo (robusto, evita errori "non-empty directory") ---
+      # --- Copia l'artifact nel repository in modo robusto ---
       - name: Copy artifact into repo
         run: |
           set -euo pipefail
 
-          # prepara una cartella temporanea isolata e copia lì il contenuto dell'artifact
+          # Prepara una cartella temporanea isolata e copia lì il contenuto dell'artifact.
           TMPDIR=$(mktemp -d)
           echo "Using temporary dir: $TMPDIR"
           rsync -a plugin-artifact/ "$TMPDIR"/
 
-          # poi sincronizza dalla temp dir alla root del repo (evita conflitti con plugin-artifact/)
+          # Poi sincronizza dalla cartella temp alla root del repo, escludendo file specifici.
           rsync -av --delete-after \
             --exclude 'package.json' \
             --exclude 'vss-extension.json' \
@@ -106,10 +122,10 @@ jobs:
             "$TMPDIR"/ .
 
           RSYNC_EXIT=$?
-          # pulizia
+          # Pulizia
           rm -rf "$TMPDIR"
 
-          # gestisci exit code di rsync: ignora 24 (warning "some files vanished"), fallisci per altri codici
+          # Gestisci l'exit code di rsync. Ignora 24 (warning) e fallisci per gli altri.
           if [ $RSYNC_EXIT -eq 24 ]; then
             echo "rsync returned code 24 (some files vanished) — treating as non-fatal and continuing."
           elif [ $RSYNC_EXIT -ne 0 ]; then
@@ -117,10 +133,10 @@ jobs:
             exit $RSYNC_EXIT
           fi
 
-          # aggiungi modifiche a git
+          # Aggiungi le modifiche a git.
           git add -A || true
 
-      # --- Create release branch (stile pre-release) ---
+      # --- Crea il branch di release ---
       - name: Create release branch
         working-directory: .
         run: |
@@ -131,40 +147,46 @@ jobs:
           git checkout -B release/$RELEASE_VERSION origin/$CURRENT_BRANCH
 
           git add -A
+          # Imposta l'utente e l'email anche qui, per sicurezza.
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           if ! git diff --cached --quiet; then
             git commit -m "Prepare release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
           fi
 
+          # Esegui il push, l'autenticazione è gestita dall'azione di checkout.
           git push origin release/$RELEASE_VERSION --force-with-lease
 
-      # --- Create release tag ---
+      # --- Crea il tag di release ---
       - name: Create release tag
         working-directory: .
         run: |
           RELEASE_VERSION=$(jq -r '.version' package.json)
           TAG=v$RELEASE_VERSION
 
+          # Controlla se il tag esiste già e lo aggiorna.
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             git tag -f "$TAG" -m "Release $RELEASE_VERSION"
           else
             git tag -a "$TAG" -m "Release $RELEASE_VERSION"
           fi
 
+          # Esegui il push del tag.
           git push origin "$TAG" --force
 
-      # --- Install Node dependencies ---
+      # --- Installa le dipendenze di Node ---
       - name: Install Node dependencies
         working-directory: .
         run: npm ci
 
-      # --- Publish plugin to VSCode Marketplace ---
+      # --- Pubblica il plugin su VSCode Marketplace ---
       - name: Publish VSCode Plugin as release
         working-directory: .
         run: |
           PUBLISH_VERSION=$(jq -r '.version' package.json)
           echo "Publishing version from package.json: $PUBLISH_VERSION"
+          # Usa npx per pubblicare il plugin.
           npx @vscode/vsce publish
         env:
+          # Assicurati che il token di accesso personale sia configurato come segreto.
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
