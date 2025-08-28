@@ -221,9 +221,12 @@ jobs:
           fi
 
           ZIP=plugin-$VERSION.zip
-          echo "Uploading $ZIP to $UPLOAD_URL"
-          curl -s --data-binary @"$ZIP" -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/zip" \
-            "$UPLOAD_URL?name=$ZIP" | jq -r '.browser_download_url'
+          UPLOAD_URL_EXPANDED="${UPLOAD_URL%\{*}?name=$ZIP"
+          echo "Uploading $ZIP to $UPLOAD_URL_EXPANDED"
+          curl -s --data-binary @"$ZIP" \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Content-Type: application/zip" \
+              "$UPLOAD_URL_EXPANDED" | jq -r '.browser_download_url'
 
       # --- Publish plugin as pre-release to VSCode Marketplace (stessa logica) ---
       - name: Publish VSCode Plugin as pre-release
