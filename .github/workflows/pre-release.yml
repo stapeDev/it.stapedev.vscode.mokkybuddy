@@ -190,15 +190,20 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # --- Crea PR da pre-release verso main ---
+      # --- Crea PR da pre-release verso main (solo se non esiste già) ---
       - name: Create PR to main
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
-          gh pr create \
-            --base main \
-            --head pre-release/$VERSION \
-            --title "Pre-release $VERSION" \
-            --body "Automated pre-release PR from pre-release/$VERSION to main."
+          # controlla se la PR esiste già
+          if gh pr list --base main --head pre-release/$VERSION --json number --jq '.[0].number' | grep -q .; then
+            echo "PR da pre-release/$VERSION a main esiste già, skip."
+          else
+            gh pr create \
+              --base main \
+              --head pre-release/$VERSION \
+              --title "Pre-release $VERSION" \
+              --body "Automated pre-release PR from pre-release/$VERSION to main."
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        working-directory: .
+          GH_REPO: stapeDev/it.stapedev.vscode.mokkybuddy
