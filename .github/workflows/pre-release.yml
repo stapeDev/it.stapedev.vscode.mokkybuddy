@@ -222,15 +222,16 @@ jobs:
           fi
           git push origin $TAG --force
 
-      # --- Zip plugin artifact (alpha) ---
+      # --- Zip plugin artifact (fixed) ---
       - name: Zip plugin artifact
         working-directory: plugin
         run: |
           VERSION=${{ steps.compute_versions.outputs.alpha_version }}
           ZIP=plugin-$VERSION.zip
-          cd plugin
-          zip -r ../$ZIP .
-          cd ..
+          # zip the current folder content into ../$ZIP
+          zip -r "../$ZIP" .
+          # list the created zip to verify
+          ls -la "../$ZIP"
 
       # --- Create GitHub pre-release and upload asset (alpha) ---
       - name: Create GitHub pre-release and upload asset
