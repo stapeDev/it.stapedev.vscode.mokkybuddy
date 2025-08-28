@@ -41,3 +41,20 @@ curl -L -H "Authorization: token $JAVA_APP_PAT" \
   "$ASSET_URL" -o "$TARGET_FILE"
 
 echo "Downloaded JAR to $TARGET_FILE"
+
+# Passa in plugin e aggiungi il file con percorso relativo
+cd plugin
+
+# Configura Git
+git config user.name "github-actions"
+git config user.email "github-actions@github.com"
+
+RELATIVE_PATH="${TARGET_FILE#plugin/}"  # rimuove 'plugin/' dal percorso
+git add "$RELATIVE_PATH"
+
+if git diff --cached --quiet; then
+  echo "No changes in JAR to commit"
+else
+  git commit -m "Update JAR for version $JAVA_VERSION [skip ci]"
+  git push origin HEAD
+fi
