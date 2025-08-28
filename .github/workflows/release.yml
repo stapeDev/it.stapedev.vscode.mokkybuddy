@@ -1,145 +1,51 @@
 name: Release MokkyBuddy VSCode Plugin
-# Concedi i permessi di scrittura al job per creare release e caricare asset.
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   push:
     branches:
-      - 'main'
+      - main
 
 jobs:
   release:
-    # Esegui il job su un runner di Ubuntu.
-    runs-on: ubuntu-latest
-    steps:
-      # --- Checkout del repository principale ---
-      - name: Checkout Plugin Repo
-        # Usa actions/checkout per clonare il repository.
-        # Il token è fornito automaticamente dall'ambiente di GitHub Actions.
-        uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+  runs-on: ubuntu-latest
+  needs: versioning
+  steps:
+    # Checkout plugin con path
+    - uses: actions/checkout@v3
+      with:
+        path: plugin
+        fetch-depth: 0
 
-      # --- Installa le dipendenze (curl, jq) ---
-      - name: Install dependencies
-        # Aggiorna e installa jq e curl necessari per le API.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq curl
+    # Configura git
+    - name: Setup Git
+      run: |
+        cd plugin
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
 
-      # --- Ottieni la versione più recente della pre-release ---
-      - name: Get latest pre-release version
-        id: version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: stapeDev/it.stapedev.vscode.mokkybuddy
-        run: |
-          # Usa l'API di GitHub per trovare la pre-release più recente.
-          LATEST_PRERELEASE_TAG=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases" \
-            | jq -r '.[] | select(.prerelease==true) | .tag_name' | sort -V | tail -n1)
+    # Crea branch di release stabile
+    - name: Create release branch
+      run: |
+        cd plugin
+        RELEASE_VERSION=${{ needs.versioning.outputs.release_version }}
+        git checkout -b release/$RELEASE_VERSION
+        git push origin release/$RELEASE_VERSION
 
-          if [ -z "$LATEST_PRERELEASE_TAG" ] || [ "$LATEST_PRERELEASE_TAG" = "null" ]; then
-            echo "No pre-release found!"
-            exit 1
-          fi
+    # Crea tag stabile
+    - name: Tag release
+      run: |
+        cd plugin
+        RELEASE_VERSION=${{ needs.versioning.outputs.release_version }}
+        git tag -a "v$RELEASE_VERSION" -m "Release $RELEASE_VERSION"
+        git push origin "v$RELEASE_VERSION"
 
-          # Estrai la versione pulita dal tag.
-          ARTIFACT_VERSION="${LATEST_PRERELEASE_TAG#v}"
-          ARTIFACT_VERSION="${ARTIFACT_VERSION%-pre}"
-
-          echo "artifact_version=$ARTIFACT_VERSION" >> $GITHUB_OUTPUT
-          echo "latest_prerelease_tag=$LATEST_PRERELEASE_TAG" >> $GITHUB_OUTPUT
-          echo "Found latest pre-release tag: $LATEST_PRERELEASE_TAG -> artifact_version=$ARTIFACT_VERSION"
-
-      # --- Scarica l'asset della pre-release ---
-      - name: Download pre-release asset
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: stapeDev/it.stapedev.vscode.mokkybuddy
-          ARTIFACT_VERSION: ${{ steps.version.outputs.artifact_version }}
-        run: |
-          VERSION=${ARTIFACT_VERSION}
-          LATEST_TAG=v${VERSION}-pre
-          echo "Fetching release for tag $LATEST_TAG"
-          RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/releases/tags/$LATEST_TAG")
-
-          # Trova l'URL dell'asset zip dal JSON della risposta.
-          ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' || true)
-          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-            echo "Asset not found for tag $LATEST_TAG. Response:"
-            echo "$RESP"
-            exit 1
-          fi
-
-          FNAME=plugin-${VERSION}.zip
-          echo "Downloading asset $FNAME from $ASSET_URL"
-          # Scarica il file zip usando il token.
-          curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
-            "$ASSET_URL" -o "$FNAME"
-
-          mkdir -p plugin-artifact
-          unzip -o "$FNAME" -d plugin-artifact
-          echo "Unzipped artifact into plugin-artifact/"
-
-      # --- Installa le dipendenze di Node ---
-      - name: Install Node dependencies
-        working-directory: plugin-artifact
-        run: npm ci
-
-      # --- Pubblica il plugin su VSCode Marketplace ---
-      - name: Publish VSCode Plugin as release
-        working-directory: plugin-artifact
-        run: |
-          PUBLISH_VERSION=$(jq -r '.version' package.json)
-          echo "Publishing version from package.json: $PUBLISH_VERSION"
-          # Usa npx per pubblicare il plugin.
-          npx @vscode/vsce publish
-        env:
-          # Assicurati che il token di accesso personale sia configurato come segreto.
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      # --- Crea la release su GitHub tramite l'API ---
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const { repos } = github.rest;
-            const tag = `v${process.env.ARTIFACT_VERSION}`;
-            const releaseTitle = `Release ${process.env.ARTIFACT_VERSION}`;
-            const releaseBody = `Official release of version ${process.env.ARTIFACT_VERSION}`;
-            const uploadUrl = await repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: tag,
-              name: releaseTitle,
-              body: releaseBody,
-              draft: false,
-              prerelease: false
-            }).then(response => {
-              console.log('Release created successfully!');
-              return response.data.upload_url;
-            }).catch(error => {
-              console.error('Error creating release:', error);
-              process.exit(1);
-            });
-            console.log(`Upload URL: ${uploadUrl}`);
-            core.setOutput('upload_url', uploadUrl);
-        env:
-          ARTIFACT_VERSION: ${{ steps.version.outputs.artifact_version }}
-
-      # --- Carica l'asset nella release ---
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./plugin-artifact/plugin-${{ steps.version.outputs.artifact_version }}.vsix
-          asset_name: plugin-${{ steps.version.outputs.artifact_version }}.vsix
-          asset_content_type: application/zip
+    # Publish su Marketplace
+    - name: Publish stable release
+      run: |
+        cd plugin
+        npx @vscode/vsce publish
+      env:
+        VSCE_PAT: ${{ secrets.VSCE_PAT }}
