@@ -142,8 +142,10 @@ jobs:
             echo "Non ci sono differenze di versione, facciamo un bump $BUMP_TYPE"
           fi
 
-          jq ".version = \"$NEW_VERSION\"" package.json > temp.json && mv temp.json package.json
-          jq ".version = \"$(jq -r .version package.json)\"" vss-extension.json > temp.json && mv temp.json vss-extension.json
+          # Usa un approccio più sicuro per l'aggiornamento JSON
+          jq ".version = \"$NEW_VERSION\"" package.json > temp_package.json && mv temp_package.json package.json
+          jq ".version = \"$NEW_VERSION\"" vss-extension.json > temp_vss.json && mv temp_vss.json vss-extension.json
+          
           sed -i "s|Java App v[0-9]\+\.[0-9]\+\.[0-9]\+|Java App v${JAVA_VERSION}|g" README.md
           
           LAST_TAG=$(git describe --tags --abbrev=0)
