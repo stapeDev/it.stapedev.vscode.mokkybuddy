@@ -49,6 +49,16 @@ cd plugin
 git config user.name "github-actions"
 git config user.email "github-actions@github.com"
 
+# Verifica branch corrente
+CURRENT_BRANCH=$(git branch --show-current)
+if [ "$CURRENT_BRANCH" = "main" ]; then
+  FEATURE_BRANCH="update-jar-$JAVA_VERSION"
+  echo "On main branch, creating feature branch $FEATURE_BRANCH"
+  git checkout -b "$FEATURE_BRANCH"
+else
+  FEATURE_BRANCH="$CURRENT_BRANCH"
+fi
+
 RELATIVE_PATH="${TARGET_FILE#plugin/}"  # rimuove 'plugin/' dal percorso
 git add "$RELATIVE_PATH"
 
@@ -56,5 +66,5 @@ if git diff --cached --quiet; then
   echo "No changes in JAR to commit"
 else
   git commit -m "Update JAR for version $JAVA_VERSION [skip ci]"
-  git push origin HEAD
+  git push origin "$FEATURE_BRANCH"
 fi
