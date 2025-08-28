@@ -17,18 +17,24 @@ jobs:
     outputs:
       java_version: ${{ steps.get_java.outputs.version }}
     steps:
-      # Checkout plugin e Java app
-      - uses: actions/checkout@v3
+      # --- Checkout plugin (repo pubblica o privata) ---
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.vscode.mokkybuddy
           path: plugin
           fetch-depth: 0
-      - uses: actions/checkout@v3
+          token: ${{ secrets.GITHUB_TOKEN }} # token predefinito GitHub Actions
+
+      # --- Checkout Java App (repo privata) ---
+      - name: Checkout Java App Repo
+        uses: actions/checkout@v3
         with:
           repository: stapeDev/it.stapedev.api.mokkybuddy
           ref: ${{ github.event.client_payload.branch || 'main' }}
           path: app
           fetch-depth: 0
+          token: ${{ secrets.JAVA_APP_PAT }} # token con permessi repo
 
       # Setup Node.js
       - name: Setup Node.js
