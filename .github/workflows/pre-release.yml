@@ -51,7 +51,7 @@ jobs:
 
       # Download API JAR
       - name: Download API JAR
-         run: |
+        run: |
           chmod +x plugin/.github/scripts/download-jar.sh
           plugin/.github/scripts/download-jar.sh ${{ steps.get_java.outputs.version }}
 
