@@ -88,37 +88,37 @@ jobs:
             echo "version_artifact=" >> $GITHUB_OUTPUT
           fi
 
-     # --- Copy artifact into repo (robusto, evita errori "non-empty directory") ---
-    - name: Copy artifact into repo
-      run: |
-        set -euo pipefail
+      # --- Copy artifact into repo (robusto, evita errori "non-empty directory") ---
+      - name: Copy artifact into repo
+        run: |
+          set -euo pipefail
 
-        # prepara una cartella temporanea isolata e copia lì il contenuto dell'artifact
-        TMPDIR=$(mktemp -d)
-        echo "Using temporary dir: $TMPDIR"
-        rsync -a plugin-artifact/ "$TMPDIR"/
+          # prepara una cartella temporanea isolata e copia lì il contenuto dell'artifact
+          TMPDIR=$(mktemp -d)
+          echo "Using temporary dir: $TMPDIR"
+          rsync -a plugin-artifact/ "$TMPDIR"/
 
-        # poi sincronizza dalla temp dir alla root del repo (evita conflitti con plugin-artifact/)
-        rsync -av --delete-after \
-          --exclude 'package.json' \
-          --exclude 'vss-extension.json' \
-          --exclude 'node_modules' \
-          "$TMPDIR"/ .
+          # poi sincronizza dalla temp dir alla root del repo (evita conflitti con plugin-artifact/)
+          rsync -av --delete-after \
+            --exclude 'package.json' \
+            --exclude 'vss-extension.json' \
+            --exclude 'node_modules' \
+            "$TMPDIR"/ .
 
-        RSYNC_EXIT=$?
-        # pulizia
-        rm -rf "$TMPDIR"
+          RSYNC_EXIT=$?
+          # pulizia
+          rm -rf "$TMPDIR"
 
-        # gestisci exit code di rsync: ignora 24 (warning "some files vanished"), fallisci per altri codici
-        if [ $RSYNC_EXIT -eq 24 ]; then
-          echo "rsync returned code 24 (some files vanished) — treating as non-fatal and continuing."
-        elif [ $RSYNC_EXIT -ne 0 ]; then
-          echo "rsync failed with exit code $RSYNC_EXIT — aborting."
-          exit $RSYNC_EXIT
-        fi
+          # gestisci exit code di rsync: ignora 24 (warning "some files vanished"), fallisci per altri codici
+          if [ $RSYNC_EXIT -eq 24 ]; then
+            echo "rsync returned code 24 (some files vanished) — treating as non-fatal and continuing."
+          elif [ $RSYNC_EXIT -ne 0 ]; then
+            echo "rsync failed with exit code $RSYNC_EXIT — aborting."
+            exit $RSYNC_EXIT
+          fi
 
-        # aggiungi modifiche a git
-        git add -A || true
+          # aggiungi modifiche a git
+          git add -A || true
 
       # --- Create release branch (stile pre-release) ---
       - name: Create release branch
