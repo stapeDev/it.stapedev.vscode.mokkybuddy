@@ -36,5 +36,8 @@ if ! git diff --cached --quiet; then
   git commit -m "Bump plugin version to $(jq -r '.version' package.json) [skip ci]" || true
 fi
 
+# Pusha il commit del bump sul branch corrente
+git push origin HEAD
+
 # Output finale
 echo "release_version=$(jq -r '.version' package.json)" >> $GITHUB_OUTPUT
