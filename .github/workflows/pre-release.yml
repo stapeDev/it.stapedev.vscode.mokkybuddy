@@ -198,6 +198,13 @@ jobs:
           VERSION=${{ steps.set_version.outputs.version }}
           git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
           git push origin v$VERSION-pre --force
+      
+      # --- Upload plugin artifact ---
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: plugin-final
+          path: plugin
 
       # --- Pubblica plugin come pre-release su VSCode Marketplace ---
       - name: Publish VSCode Plugin as pre-release
