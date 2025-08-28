@@ -50,7 +50,13 @@ jobs:
           RELEASE_VERSION=${{ steps.get_version.outputs.release_version }}
           git tag -a "v$RELEASE_VERSION" -m "Release $RELEASE_VERSION"
           git push origin "v$RELEASE_VERSION"
-
+      
+      # --- Install Node dependencies ---
+      - name: Install Node dependencies
+        run: |
+          cd plugin
+          npm ci
+      
       # --- Publish su Marketplace ---
       - name: Publish stable release
         run: |
