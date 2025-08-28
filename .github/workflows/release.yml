@@ -19,14 +19,21 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           path: plugin-repo
 
-      # --- Read version from repository (main) ---
+      # --- Configure Git identity ---
+      - name: Configure Git identity
+        run: |
+          cd plugin-repo
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      # --- Read version from main repository ---
       - name: Read plugin version
         id: version
         run: |
           VERSION=$(jq -r '.version' plugin-repo/package.json)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # --- Download pre-release asset from GitHub Release (NEW) ---
+      # --- Download pre-release asset from GitHub Release ---
       - name: Download pre-release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,7 +45,7 @@ jobs:
           RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases/tags/$TAG")
 
-          ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .url' )
+          ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
           if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
             echo "Asset not found for tag $TAG. Response:"
             echo "$RESP"
@@ -53,7 +60,7 @@ jobs:
           mkdir -p plugin-artifact
           unzip -o "$FNAME" -d plugin-artifact
 
-      # --- Leggi versione dal package.json dentro l'artifact (stessa logica, ora dal repo) ---
+      # --- Read version from artifact as fallback ---
       - name: Read plugin version (artifact fallback)
         id: version_artifact
         run: |
@@ -64,41 +71,44 @@ jobs:
             echo "version_artifact=" >> $GITHUB_OUTPUT
           fi
 
-      # --- Copia artifact nella repo ---
+      # --- Copy artifact into repository ---
       - name: Copy artifact into repo
         run: |
           cp -R plugin-artifact/* plugin-repo/
           cd plugin-repo
           git add -A
 
-      # --- Crea branch release ---
+      # --- Create release branch ---
       - name: Create release branch
         run: |
           cd plugin-repo
-          RELEASE_BRANCH=release/${{ steps.version.outputs.version }}
+          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.version }}
+          RELEASE_BRANCH=release/$RELEASE_VERSION
           if git show-ref --verify --quiet refs/heads/$RELEASE_BRANCH; then
             git checkout $RELEASE_BRANCH
           else
             git checkout -b $RELEASE_BRANCH
           fi
+
           if ! git diff --cached --quiet; then
-            git commit -m "Prepare release ${{ steps.version.outputs.version }} [skip ci]"
+            git commit -m "Prepare release $RELEASE_VERSION [skip ci]"
             git push origin $RELEASE_BRANCH
           fi
 
-      # --- Crea tag release ---
+      # --- Create release tag ---
       - name: Create release tag
         run: |
           cd plugin-repo
-          TAG=v${{ steps.version.outputs.version }}
+          RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.version }}
+          TAG=v$RELEASE_VERSION
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already esiste, skip"
+            echo "Tag $TAG already exists, skip"
           else
             git tag -a $TAG -m "Release $TAG"
             git push origin $TAG
           fi
 
-      # --- Pubblica plugin sul Marketplace ---
+      # --- Publish plugin to VSCode Marketplace ---
       - name: Publish VSCode Plugin as release
         working-directory: plugin-repo
         run: npx @vscode/vsce publish
