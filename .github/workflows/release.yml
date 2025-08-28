@@ -43,7 +43,6 @@ jobs:
             exit 1
           fi
 
-          # strip leading v (if any) and trailing -pre
           ARTIFACT_VERSION="${LATEST_PRERELEASE_TAG#v}"
           ARTIFACT_VERSION="${ARTIFACT_VERSION%-pre}"
 
@@ -61,7 +60,8 @@ jobs:
           VERSION=${ARTIFACT_VERSION}
           LATEST_TAG=v${VERSION}-pre
           echo "Fetching release for tag $LATEST_TAG"
-          RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+          RESP=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/releases/tags/$LATEST_TAG")
 
           ASSET_URL=$(echo "$RESP" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' || true)
@@ -80,7 +80,7 @@ jobs:
           unzip -o "$FNAME" -d plugin-artifact
           echo "Unzipped artifact into plugin-artifact/"
 
-      # --- Read version from artifact as fallback (ARTIFACT_VERSION detection) ---
+      # --- Read version from artifact as fallback ---
       - name: Read plugin version (artifact fallback)
         id: version_artifact
         run: |
@@ -91,10 +91,9 @@ jobs:
             echo "version_artifact=" >> $GITHUB_OUTPUT
           fi
 
-      # --- Copy artifact into repository BUT DO NOT overwrite package.json / vss-extension.json ---
-      - name: Copy artifact into repo (preserve package.json)
+      # --- Copy artifact into repository (preserve package.json) ---
+      - name: Copy artifact into repo
         run: |
-          # copy everything from plugin-artifact/ into plugin-repo, excluding package.json and vss-extension.json
           rsync -av --delete --exclude 'package.json' --exclude 'vss-extension.json' plugin-artifact/ plugin-repo/
           echo "plugin-repo content after copy:"
           ls -la plugin-repo | sed -n '1,200p'
@@ -105,14 +104,14 @@ jobs:
           cd plugin-repo
           git add -A || true
 
-      # --- Create release branch (based on ARTIFACT version) ---
+      # --- Create release branch ---
       - name: Create release branch
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT || secrets.GITHUB_TOKEN }}
         run: |
           cd plugin-repo
-          # prefer artifact version, fallback to plugin-repo package.json
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
           RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.artifact_version || '' }}
           if [ -z "$RELEASE_VERSION" ]; then
             echo "No release version available!"
@@ -120,7 +119,6 @@ jobs:
           fi
           RELEASE_BRANCH=release/$RELEASE_VERSION
 
-          # create or checkout branch
           if git show-ref --verify --quiet refs/heads/$RELEASE_BRANCH; then
             git checkout $RELEASE_BRANCH
           else
@@ -129,39 +127,34 @@ jobs:
 
           if ! git diff --cached --quiet; then
             git commit -m "Prepare release $RELEASE_VERSION [skip ci]" || echo "No changes to commit"
-            # push using http.extraheader with TOKEN (works with GITHUB_TOKEN or PAT)
-            git -c http.extraheader="AUTHORIZATION: bearer $TOKEN" push origin $RELEASE_BRANCH
-          else
-            echo "No changes to push"
           fi
 
-      # --- Create release tag (artifact version) ---
+          git -c http.extraheader="AUTHORIZATION: bearer $TOKEN" push origin $RELEASE_BRANCH
+
+      # --- Create release tag ---
       - name: Create release tag
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT || secrets.GITHUB_TOKEN }}
         run: |
           cd plugin-repo
           RELEASE_VERSION=${{ steps.version_artifact.outputs.version_artifact || steps.version.outputs.artifact_version }}
           TAG=v$RELEASE_VERSION
 
-          # create / update tag locally
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists locally"
           else
             git tag -a "$TAG" -m "Release $TAG"
           fi
 
-          # push tag using bearer token
           git -c http.extraheader="AUTHORIZATION: bearer $TOKEN" push origin "$TAG"
 
-      # --- Install dependencies before publishing (on plugin-repo) ---
+      # --- Install Node dependencies ---
       - name: Install Node dependencies
         working-directory: plugin-repo
         run: npm ci
 
-      # --- Publish plugin to VSCode Marketplace using plugin-repo/package.json version ---
-      - name: Publish VSCode Plugin as release (use package.json in repo)
+      # --- Publish plugin to VSCode Marketplace ---
+      - name: Publish VSCode Plugin as release
         working-directory: plugin-repo
         run: |
           PUBLISH_VERSION=$(jq -r '.version' package.json)
