@@ -51,7 +51,7 @@ jobs:
 
       # Download API JAR
       - name: Download API JAR
-        run: ./scripts/download-jar.sh ${{ steps.get_java.outputs.version }}
+        run: .github/scripts/download-jar.sh ${{ steps.get_java.outputs.version }}
 
       # Install & test plugin
       - run: npm ci
@@ -78,11 +78,11 @@ jobs:
       # Bump versione plugin
       - name: Bump version
         id: bump
-        run: ./scripts/bump-version.sh ${{ needs.prepare.outputs.java_version }}
+        run: .github/scripts/bump-version.sh ${{ needs.prepare.outputs.java_version }}
 
       # Aggiorna CHANGELOG e README/features
       - name: Update changelog
-        run: ./scripts/update-changelog.sh
+        run: .github/scripts/update-changelog.sh
 
   release:
     runs-on: ubuntu-latest
@@ -96,17 +96,17 @@ jobs:
 
       # Create branch/tag pre-release
       - name: Create branch/tag/pre-release
-        run: ./scripts/create-prerelease.sh ${{ needs.versioning.outputs.release_version }}
+        run: .github/scripts/create-prerelease.sh ${{ needs.versioning.outputs.release_version }}
 
       # Publish pre-release su Marketplace
       - name: Publish Marketplace pre-release
-        run: ./scripts/publish-prerelease.sh
+        run: .github/scripts/publish-prerelease.sh
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       # Post-release bump & push su branch pre-release
       - name: Post-release bump
-        run: ./scripts/post-release-bump.sh ${{ needs.versioning.outputs.release_version }}
+        run: .github/scripts/post-release-bump.sh ${{ needs.versioning.outputs.release_version }}
 
       # Crea PR dal branch pre-release verso main
       - name: Create PR to main
