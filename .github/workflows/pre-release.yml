@@ -86,29 +86,45 @@ jobs:
         working-directory: plugin
         run: npm test
 
-      # --- Aggiorna versione plugin e file JSON ---
-      - name: Update plugin version to Java app version
+      # --- Aggiorna versione plugin basata su commit e Java App ---
+      - name: Update plugin version based on commits
         working-directory: plugin
         run: |
-          JAVA_VERSION=${{ steps.get_java_version.outputs.java_version_clean }}
           CURRENT_VERSION=$(jq -r '.version' package.json)
+          JAVA_VERSION=${{ steps.get_java_version.outputs.java_version_clean }}
+          EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
+
+          # Recupera i commit dall'ultimo tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          RANGE=${LAST_TAG:+$LAST_TAG..HEAD}
+          COMMITS=$(git log $RANGE --pretty=format:"%s%b" || true)
+
+          echo "Commits to analyze:"
+          echo "$COMMITS"
 
           # Funzione per confronto semantico
           semver_gt() {
             [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
           }
 
-          EXTENSION_ID=$(jq -r '.publisher + "." + .name' package.json)
-
-          if npx vsce show $EXTENSION_ID@$JAVA_VERSION > /dev/null 2>&1; then
-            echo "Version $JAVA_VERSION already published, bumping patch"
-            npm version patch --no-git-tag-version
-          elif semver_gt "$CURRENT_VERSION" "$JAVA_VERSION"; then
-            echo "Current plugin version ($CURRENT_VERSION) è più nuova di Java app ($JAVA_VERSION), incrementiamo patch"
+          # Determina tipo di bump
+          if echo "$COMMITS" | grep -q 'BREAKING CHANGE'; then
+            echo "BREAKING CHANGE trovata, incremento MAJOR"
+            npm version major --no-git-tag-version
+          elif echo "$COMMITS" | grep -q '^feat'; then
+            echo "Commits feature trovati, incremento MINOR"
+            npm version minor --no-git-tag-version
+          elif echo "$COMMITS" | grep -q '^fix'; then
+            echo "Commits fix trovati, incremento PATCH"
             npm version patch --no-git-tag-version
           else
-            echo "Aggiorniamo plugin alla versione Java app ($JAVA_VERSION)"
-            npm version $JAVA_VERSION --no-git-tag-version
+            if semver_gt "$JAVA_VERSION" "$CURRENT_VERSION"; then
+              echo "Allineiamo alla versione Java App $JAVA_VERSION"
+              npm version $JAVA_VERSION --no-git-tag-version
+            else
+              echo "Incrementiamo PATCH di default"
+              npm version patch --no-git-tag-version
+            fi
           fi
 
           # Aggiorna vss-extension.json se presente
@@ -165,17 +181,13 @@ jobs:
             git push origin "$CURRENT_BRANCH" --force
           fi
 
-      # --- Crea branch pre-release a partire dal branch corrente ---
+      # --- Crea branch pre-release ---
       - name: Create pre-release branch
         working-directory: plugin
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
           CURRENT_BRANCH=${GITHUB_REF_NAME}
-
-          # Fetch del branch corrente
           git fetch origin $CURRENT_BRANCH
-
-          # Crea branch pre-release da quello corrente
           git checkout -B pre-release/$VERSION origin/$CURRENT_BRANCH
           git push origin pre-release/$VERSION --force-with-lease
 
@@ -194,11 +206,10 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # --- Crea PR da pre-release verso main (solo se non esiste già) ---
+      # --- Crea PR da pre-release verso main ---
       - name: Create PR to main
         run: |
           VERSION=${{ steps.set_version.outputs.version }}
-          # controlla se la PR esiste già
           if gh pr list --base main --head pre-release/$VERSION --json number --jq '.[0].number' | grep -q .; then
             echo "PR da pre-release/$VERSION a main esiste già, skip."
           else
@@ -207,7 +218,6 @@ jobs:
               --head pre-release/$VERSION \
               --title "PR from pre-release/$VERSION to main." \
               --body "Automated pre-release PR from pre-release/$VERSION to main."
-          fi
         env:
           GH_TOKEN: ${{ secrets.INTERNAL_PLUGIN_CREATE_PR_PAT }}
           GH_REPO: stapeDev/it.stapedev.vscode.mokkybuddy
