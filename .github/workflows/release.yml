@@ -1,5 +1,5 @@
 name: Release MokkyBuddy VSCode Plugin
-# Concedi i permessi di scrittura al job per poter creare branch e tag.
+# Concedi i permessi di scrittura per poter creare release.
 permissions:
   contents: write
 
@@ -20,13 +20,6 @@ jobs:
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      # --- Configura l'identità Git ---
-      - name: Configure Git identity
-        # Imposta l'utente e l'email per i commit futuri.
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
 
       # --- Installa le dipendenze (curl, jq) ---
       - name: Install dependencies
@@ -89,78 +82,18 @@ jobs:
           curl -L -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/octet-stream" \
             "$ASSET_URL" -o "$FNAME"
 
+          echo "Unzipped artifact into plugin-artifact/"
           mkdir -p plugin-artifact
           unzip -o "$FNAME" -d plugin-artifact
-          echo "Unzipped artifact into plugin-artifact/"
-
-      # --- Leggi la versione del plugin dall'artifact scaricato ---
-      - name: Read plugin version
-        id: version_artifact
-        run: |
-          if [ -f plugin-artifact/package.json ]; then
-            VERSION_ARTIFACT=$(jq -r '.version' plugin-artifact/package.json)
-            echo "version_artifact=$VERSION_ARTIFACT" >> $GITHUB_OUTPUT
-          else
-            echo "version_artifact=" >> $GITHUB_OUTPUT
-          fi
-
-      # --- Copia l'artifact nel repository in modo robusto ---
-      - name: Copy artifact into repo
-        run: |
-          set -euo pipefail
-
-          # Prepara una cartella temporanea isolata e copia lì il contenuto dell'artifact.
-          TMPDIR=$(mktemp -d)
-          echo "Using temporary dir: $TMPDIR"
-          rsync -a plugin-artifact/ "$TMPDIR"/
-
-          # Poi sincronizza dalla cartella temp alla root del repo, escludendo file specifici.
-          rsync -av --delete-after \
-            --exclude 'package.json' \
-            --exclude 'vss-extension.json' \
-            --exclude 'node_modules' \
-            "$TMPDIR"/ .
-
-          RSYNC_EXIT=$?
-          # Pulizia
-          rm -rf "$TMPDIR"
-
-          # Gestisci l'exit code di rsync. Ignora 24 (warning) e fallisci per gli altri.
-          if [ $RSYNC_EXIT -eq 24 ]; then
-            echo "rsync returned code 24 (some files vanished) — treating as non-fatal and continuing."
-          elif [ $RSYNC_EXIT -ne 0 ]; then
-            echo "rsync failed with exit code $RSYNC_EXIT — aborting."
-            exit $RSYNC_EXIT
-          fi
-
-          # Aggiungi le modifiche a git.
-          git add -A || true
-
-      # --- Crea il tag di release ---
-      - name: Create release tag
-        working-directory: .
-        run: |
-          RELEASE_VERSION=$(jq -r '.version' package.json)
-          TAG=v$RELEASE_VERSION
-
-          # Controlla se il tag esiste già e lo aggiorna.
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            git tag -f "$TAG" -m "Release $RELEASE_VERSION"
-          else
-            git tag -a "$TAG" -m "Release $RELEASE_VERSION"
-          fi
-
-          # Esegui il push del tag.
-          git push origin "$TAG" --force
 
       # --- Installa le dipendenze di Node ---
       - name: Install Node dependencies
-        working-directory: .
+        working-directory: plugin-artifact
         run: npm ci
 
       # --- Pubblica il plugin su VSCode Marketplace ---
       - name: Publish VSCode Plugin as release
-        working-directory: .
+        working-directory: plugin-artifact
         run: |
           PUBLISH_VERSION=$(jq -r '.version' package.json)
           echo "Publishing version from package.json: $PUBLISH_VERSION"
@@ -169,3 +102,44 @@ jobs:
         env:
           # Assicurati che il token di accesso personale sia configurato come segreto.
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      # --- Crea la release su GitHub tramite l'API ---
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { repos } = github.rest;
+            const tag = `v${process.env.ARTIFACT_VERSION}`;
+            const releaseTitle = `Release ${process.env.ARTIFACT_VERSION}`;
+            const releaseBody = `Official release of version ${process.env.ARTIFACT_VERSION}`;
+            const uploadUrl = await repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: releaseTitle,
+              body: releaseBody,
+              draft: false,
+              prerelease: false
+            }).then(response => {
+              console.log('Release created successfully!');
+              return response.data.upload_url;
+            }).catch(error => {
+              console.error('Error creating release:', error);
+              process.exit(1);
+            });
+            console.log(`Upload URL: ${uploadUrl}`);
+            core.setOutput('upload_url', uploadUrl);
+        env:
+          ARTIFACT_VERSION: ${{ steps.version.outputs.artifact_version }}
+
+      # --- Carica l'asset nella release ---
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./plugin-artifact/plugin-${{ steps.version.outputs.artifact_version }}.vsix
+          asset_name: plugin-${{ steps.version.outputs.artifact_version }}.vsix
+          asset_content_type: application/zip
