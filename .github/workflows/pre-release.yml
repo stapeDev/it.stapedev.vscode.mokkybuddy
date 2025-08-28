@@ -106,15 +106,20 @@ jobs:
           }
 
           if echo "$COMMITS" | grep -q 'BREAKING CHANGE'; then
+            echo "BREAKING CHANGE trovata, incremento MAJOR"
             npm version major --no-git-tag-version
           elif echo "$COMMITS" | grep -q '^feat'; then
+            echo "Commits feature trovati, incremento MINOR"
             npm version minor --no-git-tag-version
           elif echo "$COMMITS" | grep -q '^fix'; then
+            echo "Commits fix trovati, incremento PATCH"
             npm version patch --no-git-tag-version
           else
             if semver_gt "$JAVA_VERSION" "$CURRENT_VERSION"; then
+              echo "Allineiamo alla versione Java App $JAVA_VERSION"
               npm version $JAVA_VERSION --no-git-tag-version
             else
+              echo "Incrementiamo PATCH di default"
               npm version patch --no-git-tag-version
             fi
           fi
@@ -124,11 +129,35 @@ jobs:
             mv vss-extension.tmp.json vss-extension.json
           fi
 
-      # --- Update docs (stessa logica) ---
+      # --- Compute base and alpha versions (alpha = base + "-alpha") ---  # <<< NEW >>>
+      - name: Compute base and alpha versions
+        id: compute_versions
+        working-directory: plugin
+        run: |
+          BASE_VERSION=$(jq -r '.version' package.json)
+          ALPHA_VERSION="${BASE_VERSION}-alpha"
+          echo "base_version=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "alpha_version=$ALPHA_VERSION" >> $GITHUB_OUTPUT
+          echo "Computed BASE_VERSION=$BASE_VERSION and ALPHA_VERSION=$ALPHA_VERSION"
+
+      # --- Apply alpha version to package.json and vss-extension.json ---  # <<< NEW >>>
+      - name: Apply alpha version
+        working-directory: plugin
+        run: |
+          ALPHA_VERSION=${{ steps.compute_versions.outputs.alpha_version }}
+          echo "Applying alpha version: $ALPHA_VERSION"
+          # Use npm to set version (no tag)
+          npm version "$ALPHA_VERSION" --no-git-tag-version
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$ALPHA_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
+          fi
+
+      # --- Update docs (use alpha version for badges) ---
       - name: Update docs
         working-directory: plugin
         run: |
-          VERSION=$(jq -r '.version' package.json)
+          VERSION=${{ steps.compute_versions.outputs.alpha_version }}
           sed -i "s/badge\/version-[0-9]\+\.[0-9]\+\.[0-9]\+/badge\/version-$VERSION/" README.md || true
 
           cd ../app
@@ -143,7 +172,7 @@ jobs:
 
           [ ! -f CHANGELOG.md ] && echo "# Changelog" > CHANGELOG.md
           TMP=$(mktemp)
-          echo "## Version $VERSION ($(date +'%Y-%m-%d'))" >> "$TMP"
+          echo "## Version ${VERSION} ($(date +'%Y-%m-%d'))" >> "$TMP"
           [ -n "$FEATS" ] && echo -e "\n### Features\n$FEATS" >> "$TMP"
           [ -n "$FIXES" ] && echo -e "\n### Fixes\n$FIXES" >> "$TMP"
           [ -n "$CHORES" ] && echo -e "\n### Chores\n$CHORES" >> "$TMP"
@@ -152,15 +181,15 @@ jobs:
           mv CHANGELOG.new CHANGELOG.md
           rm -f "$TMP"
 
-      # --- Imposta VERSION come output ---
+      # --- Set VERSION output (alpha) and BASE output ---  # <<< NEW >>>
       - name: Set VERSION output
         id: set_version
         run: |
-          VERSION=$(jq -r '.version' plugin/package.json)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=${{ steps.compute_versions.outputs.alpha_version }}" >> $GITHUB_OUTPUT
+          echo "base_version=${{ steps.compute_versions.outputs.base_version }}" >> $GITHUB_OUTPUT
 
-      # --- Commit e pre-release (stessa logica) ---
-      - name: Commit updates on current branch
+      # --- Commit alpha version on current branch ---
+      - name: Commit alpha version
         working-directory: plugin
         run: |
           git config user.name "github-actions"
@@ -168,44 +197,45 @@ jobs:
           CURRENT_BRANCH=${GITHUB_REF_NAME}
           git add -A
           if ! git diff --cached --quiet; then
-            git commit -m "Update plugin version, docs, resources [skip ci]" || echo "No changes to commit"
-            git push origin "$CURRENT_BRANCH" --force
+            git commit -m "Set pre-release alpha version ${ { steps.compute_versions.outputs.alpha_version } } [skip ci]" || echo "No changes to commit"
+          else
+            echo "No changes to commit"
           fi
+          # Push commit to the source branch
+          git push origin HEAD || true
 
-      # --- Crea branch pre-release (stessa logica) ---
-      - name: Create pre-release branch
-        working-directory: plugin
-        run: |
-          VERSION=${{ steps.set_version.outputs.version }}
-          CURRENT_BRANCH=${GITHUB_REF_NAME}
-          git fetch origin $CURRENT_BRANCH
-          git checkout -B pre-release/$VERSION origin/$CURRENT_BRANCH
-          git push origin pre-release/$VERSION --force-with-lease
-
-      # --- Crea tag pre-release (stessa logica) ---
+      # --- Create pre-release tag (tag is the alpha version) ---
       - name: Create pre-release tag
         working-directory: plugin
         run: |
-          VERSION=${{ steps.set_version.outputs.version }}
-          git tag -fa v$VERSION-pre -m "Pre-release $VERSION"
-          git push origin v$VERSION-pre --force
+          VERSION=${{ steps.compute_versions.outputs.alpha_version }}
+          TAG=v$VERSION
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG exists, forcing update"
+            git tag -f $TAG -m "Pre-release $VERSION"
+          else
+            git tag -a $TAG -m "Pre-release $VERSION"
+          fi
+          git push origin $TAG --force
 
-      # --- Zip plugin and upload as GitHub Release asset (NEW) ---
+      # --- Zip plugin artifact (alpha) ---
       - name: Zip plugin artifact
+        working-directory: plugin
         run: |
-          VERSION=${{ steps.set_version.outputs.version }}
+          VERSION=${{ steps.compute_versions.outputs.alpha_version }}
           ZIP=plugin-$VERSION.zip
           cd plugin
           zip -r ../$ZIP .
           cd ..
 
+      # --- Create GitHub pre-release and upload asset (alpha) ---
       - name: Create GitHub pre-release and upload asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: stapeDev/it.stapedev.vscode.mokkybuddy
-          VERSION: ${{ steps.set_version.outputs.version }}
+          VERSION: ${{ steps.compute_versions.outputs.alpha_version }}
         run: |
-          TAG=v$VERSION-pre
+          TAG=v${VERSION}
           PAYLOAD=$(jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "Pre-release $VERSION" '{"tag_name":$tag,"name":$name,"body":$body,"prerelease":true}')
           echo "$PAYLOAD" > /tmp/release_payload.json
 
@@ -220,7 +250,7 @@ jobs:
             exit 1
           fi
 
-          ZIP=plugin-$VERSION.zip
+          ZIP=plugin-${VERSION}.zip
           UPLOAD_URL_EXPANDED="${UPLOAD_URL%\{*}?name=$ZIP"
           echo "Uploading $ZIP to $UPLOAD_URL_EXPANDED"
           curl -s --data-binary @"$ZIP" \
@@ -228,19 +258,44 @@ jobs:
               -H "Content-Type: application/zip" \
               "$UPLOAD_URL_EXPANDED" | jq -r '.browser_download_url'
 
-      # --- Publish plugin as pre-release to VSCode Marketplace (stessa logica) ---
+      # --- Publish plugin as pre-release to VSCode Marketplace ---
       - name: Publish VSCode Plugin as pre-release
         working-directory: plugin
-        run: npx @vscode/vsce publish --pre-release
+        run: |
+          npm install  # ensure dependencies like typescript are available for package scripts
+          npx @vscode/vsce publish --pre-release
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
-      # --- Crea PR da pre-release verso main (stessa logica) ---
+      # --- Create pre-release branch containing base (clean) version ---
+      - name: Create pre-release branch with base version
+        working-directory: plugin
+        run: |
+          BASE_VERSION=${{ steps.compute_versions.outputs.base_version }}
+          CURRENT_BRANCH=${GITHUB_REF_NAME}
+          git fetch origin $CURRENT_BRANCH
+          # create branch from origin/current branch
+          git checkout -B pre-release/$BASE_VERSION origin/$CURRENT_BRANCH
+
+          # restore base version in new branch
+          npm version $BASE_VERSION --no-git-tag-version || true
+          if [ -f vss-extension.json ]; then
+            jq --arg v "$BASE_VERSION" '.version=$v' vss-extension.json > vss-extension.tmp.json
+            mv vss-extension.tmp.json vss-extension.json
+          fi
+
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Restore base version $BASE_VERSION for pre-release branch [skip ci]" || echo "No changes to commit"
+          fi
+          git push origin pre-release/$BASE_VERSION --force-with-lease
+
+      # --- Create PR from pre-release/{base_version} -> main ---
       - name: Create PR to main
         run: |
-          VERSION=${{ steps.set_version.outputs.version }}
+          VERSION=${{ steps.compute_versions.outputs.base_version }}
           if gh pr list --base main --head pre-release/$VERSION --json number --jq '.[0].number' | grep -q .; then
-            echo "PR da pre-release/$VERSION a main esiste già, skip."
+            echo "PR from pre-release/$VERSION to main already exists, skip."
           else
             gh pr create \
               --base main \
