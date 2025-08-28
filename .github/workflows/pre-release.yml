@@ -201,7 +201,7 @@ jobs:
             gh pr create \
               --base main \
               --head pre-release/$VERSION \
-              --title "Pre-release $VERSION" \
+              --title "PR from pre-release/$VERSION to main." \
               --body "Automated pre-release PR from pre-release/$VERSION to main."
           fi
         env:
