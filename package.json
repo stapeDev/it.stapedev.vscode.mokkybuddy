@@ -156,6 +156,6 @@
   },
   "dependencies": {
     "form-data": "^4.0.4",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^3.3.2"
   }
 }
