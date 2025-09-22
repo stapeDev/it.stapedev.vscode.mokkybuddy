@@ -1,0 +1,37 @@
+name: Dependabot Build & Test MokkyBuddy VSCode Plugin
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - 'dependabot/**'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      # --- Checkout plugin ---
+      - name: Checkout Plugin Repo
+        uses: actions/checkout@v3
+        with:
+          repository: stapeDev/it.stapedev.vscode.mokkybuddy
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: plugin
+          fetch-depth: 0
+
+      # --- Setup Node ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      # --- Installa dipendenze ---
+      - name: Install dependencies
+        working-directory: plugin
+        run: npm install
+
+      # --- Esegui test ---
+      - name: Run tests
+        working-directory: plugin
+        run: npm test

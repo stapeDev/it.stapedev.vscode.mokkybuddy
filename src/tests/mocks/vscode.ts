@@ -8,7 +8,7 @@ export class EventEmitter<T = any> {
     this.listeners.forEach(l => l(data));
   }
 }
-asdadasdasdasda
+
 export const window = {
   createOutputChannel: () => ({ appendLine: jest.fn(), show: jest.fn() }),
   showInputBox: jest.fn(),

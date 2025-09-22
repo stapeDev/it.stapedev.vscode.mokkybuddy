@@ -2,7 +2,7 @@
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
   "description": "Run and manage mock APIs locally easly",
-  "version": "1.0.73",
+  "version": "1.1.83",
   "publisher": "StapeDev",
   "icon": "resources/logo.png",
   "repository": {
@@ -80,6 +80,10 @@
       {
         "command": "mokkyBuddyAPIRunner.changePort",
         "title": "MokkyBuddy: Set Server Port"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.selectApiMode",
+        "title": "MokkyBuddy: Select API Mode"
       }
     ],
     "menus": {
@@ -104,6 +108,15 @@
           "type": "number",
           "default": 8081,
           "description": "Port on which the Mokky Buddy server will run"
+        },
+        "mokkyBuddy.apiMode": {
+          "type": "string",
+          "enum": [
+            "file",
+            "database"
+          ],
+          "default": "file",
+          "description": "Select whether Mokky Buddy APIs are stored in local files or accessed via database API."
         }
       }
     }
@@ -124,19 +137,29 @@
     "test": "jest --config jest.config.js --runInBand"
   },
   "devDependencies": {
+    "@types/chai": "^5.2.2",
+    "@types/form-data": "^2.2.1",
     "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.11",
+    "@types/node-fetch": "^2.6.13",
+    "@types/sinon": "^17.0.4",
     "@types/vscode": "^1.79.0",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
     "@typescript-eslint/parser": "^8.41.0",
     "@vscode/test-electron": "^2.5.2",
+    "chai": "^4.5.0",
     "esbuild": "^0.25.9",
     "eslint": "^9.34.0",
     "jest": "^30.0.5",
-    "mocha": "^11.7.1",
+    "mocha": "^11.7.2",
+    "sinon": "^21.0.0",
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2",
     "vscode": "^1.1.37"
+  },
+  "dependencies": {
+    "form-data": "^4.0.4",
+    "node-fetch": "^2.7.0"
   }
 }
