@@ -370,11 +370,35 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.addAPI', async (server: ServerDef) => {
             const methodPick = await vscode.window.showQuickPick(['GET','POST','PUT','DELETE'], { placeHolder: 'HTTP Method' });
             if (!methodPick) {return;}
+        
             const pathInput = await vscode.window.showInputBox({ placeHolder: '/path' });
             if (!pathInput) {return;}
         
-            const api: ApiDef = { method: methodPick as HttpMethod, path: pathInput };
+            // nuovo: chiedi la response JSON
+            const responseInput = await vscode.window.showInputBox({ 
+                placeHolder: 'Response JSON (es: {"msg":"ok"})', 
+                prompt: 'Lascia vuoto se non vuoi impostare una risposta'
+            });
         
+            const expectedBodyInput = await vscode.window.showInputBox({ 
+                placeHolder: 'Expected Body JSON (opzionale)', 
+                prompt: 'Lascia vuoto se non serve'
+            });
+        
+            const schemaInput = await vscode.window.showInputBox({ 
+                placeHolder: 'JSON Schema (opzionale)', 
+                prompt: 'Lascia vuoto se non serve'
+            });
+        
+            const api: ApiDef = { 
+                method: methodPick as HttpMethod, 
+                path: pathInput,
+                response: responseInput ? JSON.parse(responseInput) : undefined,
+                expectedBody: expectedBodyInput ? JSON.parse(expectedBodyInput) : undefined,
+                jsonSchema: schemaInput ? JSON.parse(schemaInput) : undefined
+            };
+        
+            // --- resto del codice invariato ---
             if (getCurrentApiMode() === 'database') {
                 try {
                     const res = await fetch(`http://localhost:${server.port}/api/mokky/route/`, {
@@ -388,24 +412,15 @@ export function activate(context: vscode.ExtensionContext) {
                 } catch (e: any) { log(`❌ Errore add API: ${e?.message ?? e}`); return; }
             }
         
-            // Aggiorna in memoria
             server.apiList.push(api);
-        
-            // Scrivi il config attivo (TEMP_CONFIG) -- in modo che loadApisForServer lo trovi subito
             writeActiveConfig(server);
-        
-            // NON sovrascrivere server.apiList leggendo api-ui.json:
-            // ricarica leggendo TEMP_CONFIG (la funzione loadApisForServer ora fa questo)
             await loadApisForServer(server);
-        
-            // Aggiorna il tree (mostra il conteggio aggiornato)
             serverProvider.refresh();
         
-            // Se il server è in esecuzione, riavvialo per caricare il nuovo TEMP_CONFIG
             if (getCurrentApiMode() === 'file' && server.running) {
                 await restartServer(server);
             }
-        }),       
+        }),         
         vscode.commands.registerCommand('mokkyBuddyAPIRunner.loadAPIConfig', async (server: ServerDef) => {
             const files = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectMany: false, filters: { 'JSON': ['json'] } });
             if (!files || files.length === 0) {return;}
