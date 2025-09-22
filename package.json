@@ -137,8 +137,8 @@
     "test": "jest --config jest.config.js --runInBand"
   },
   "devDependencies": {
+    "@types/form-data": "^2.5.2",
     "@types/chai": "^5.2.2",
-    "@types/form-data": "^2.2.1",
     "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.11",
