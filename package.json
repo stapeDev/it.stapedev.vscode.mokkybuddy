@@ -1,8 +1,8 @@
 {
   "name": "mokky-buddy-api-runner",
   "displayName": "Mokky Buddy API Runner",
-  "description": "Run and manage mock APIs locally easly",
-  "version": "1.1.83",
+  "description": "Run and manage mock APIs locally or in the cloud with SAAS mode",
+  "version": "2.0.0",
   "publisher": "StapeDev",
   "icon": "resources/logo.png",
   "repository": {
@@ -31,6 +31,12 @@
     "onCommand:mokkyBuddyAPIRunner.saveAPIConfig",
     "onCommand:mokkyBuddyAPIRunner.loadAPIConfig",
     "onCommand:mokkyBuddyAPIRunner.changePort",
+    "onCommand:mokkyBuddyAPIRunner.setApiKey",
+    "onCommand:mokkyBuddyAPIRunner.clearApiKey",
+    "onCommand:mokkyBuddyAPIRunner.createServer",
+    "onCommand:mokkyBuddyAPIRunner.deleteServer",
+    "onCommand:mokkyBuddyAPIRunner.syncRoutes",
+    "onCommand:mokkyBuddyAPIRunner.showKpi",
     "onView:mokkyBuddyServerView"
   ],
   "main": "./dist/extension.js",
@@ -59,11 +65,11 @@
       },
       {
         "command": "mokkyBuddyAPIRunner.addAPI",
-        "title": "Add API"
+        "title": "Add API Route"
       },
       {
         "command": "mokkyBuddyAPIRunner.deleteAPI",
-        "title": "Delete API"
+        "title": "Delete API Route"
       },
       {
         "command": "mokkyBuddyAPIRunner.previewJson",
@@ -84,13 +90,89 @@
       {
         "command": "mokkyBuddyAPIRunner.selectApiMode",
         "title": "MokkyBuddy: Select API Mode"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.setApiKey",
+        "title": "MokkyBuddy: Set API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.clearApiKey",
+        "title": "MokkyBuddy: Clear API Key",
+        "icon": "$(close)"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.createServer",
+        "title": "MokkyBuddy: Create New Server",
+        "icon": "$(add)"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.deleteServer",
+        "title": "MokkyBuddy: Delete Server",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.syncRoutes",
+        "title": "MokkyBuddy: Sync Routes to Cloud",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.showKpi",
+        "title": "MokkyBuddy: Show KPI Dashboard",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.refreshServers",
+        "title": "MokkyBuddy: Refresh Servers",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.editRoute",
+        "title": "MokkyBuddy: Edit Route"
+      },
+      {
+        "command": "mokkyBuddyAPIRunner.selectEnvironment",
+        "title": "MokkyBuddy: Select Environment",
+        "icon": "$(server-environment)"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "mokkyBuddyAPIRunner.refreshServers",
+          "when": "view == mokkyBuddyServerView",
+          "group": "navigation"
+        },
+        {
+          "command": "mokkyBuddyAPIRunner.selectEnvironment",
+          "when": "view == mokkyBuddyServerView",
+          "group": "navigation"
+        },
+        {
+          "command": "mokkyBuddyAPIRunner.setApiKey",
+          "when": "view == mokkyBuddyServerView && !mokkyBuddy.hasApiKey",
+          "group": "navigation"
+        },
+        {
+          "command": "mokkyBuddyAPIRunner.clearApiKey",
+          "when": "view == mokkyBuddyServerView && mokkyBuddy.hasApiKey",
+          "group": "navigation"
+        }
+      ],
       "view/item/context": [
         {
           "command": "mokkyBuddyAPIRunner.changePort",
-          "when": "view == mokkybuddyView && viewItem == server",
+          "when": "view == mokkyBuddyServerView && viewItem == serverNode",
+          "group": "inline"
+        },
+        {
+          "command": "mokkyBuddyAPIRunner.deleteServer",
+          "when": "view == mokkyBuddyServerView && viewItem == saasServerNode",
+          "group": "inline"
+        },
+        {
+          "command": "mokkyBuddyAPIRunner.syncRoutes",
+          "when": "view == mokkyBuddyServerView && viewItem == serverNode && mokkyBuddy.hasApiKey",
           "group": "inline"
         }
       ]
@@ -107,16 +189,89 @@
         "mokkyBuddy.serverPort": {
           "type": "number",
           "default": 8081,
-          "description": "Port on which the Mokky Buddy server will run"
+          "description": "Port on which the Mokky Buddy server will run (file/database mode)"
         },
         "mokkyBuddy.apiMode": {
           "type": "string",
           "enum": [
             "file",
-            "database"
+            "database",
+            "saas"
+          ],
+          "enumDescriptions": [
+            "Store APIs in local JSON files",
+            "Store APIs in local H2 database",
+            "Connect to MokkyBuddy cloud platform"
           ],
           "default": "file",
-          "description": "Select whether Mokky Buddy APIs are stored in local files or accessed via database API."
+          "description": "Select how Mokky Buddy APIs are stored and managed."
+        },
+        "mokkyBuddy.saas.environment": {
+          "type": "string",
+          "enum": [
+            "local",
+            "dev",
+            "test",
+            "prod"
+          ],
+          "enumDescriptions": [
+            "Local development (localhost:8090)",
+            "Development server",
+            "Test/Staging server",
+            "Production server"
+          ],
+          "default": "local",
+          "description": "Select the SAAS environment to connect to"
+        },
+        "mokkyBuddy.saas.endpoints.local.gatewayUrl": {
+          "type": "string",
+          "default": "http://localhost:8090",
+          "description": "Gateway URL for LOCAL environment"
+        },
+        "mokkyBuddy.saas.endpoints.local.mockServerBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:8083",
+          "description": "Mock server base URL for LOCAL environment"
+        },
+        "mokkyBuddy.saas.endpoints.dev.gatewayUrl": {
+          "type": "string",
+          "default": "https://gateway.dev.mokkybuddy.stapedev.it",
+          "description": "Gateway URL for DEV environment"
+        },
+        "mokkyBuddy.saas.endpoints.dev.mockServerBaseUrl": {
+          "type": "string",
+          "default": "https://mock.dev.mokkybuddy.stapedev.it",
+          "description": "Mock server base URL for DEV environment"
+        },
+        "mokkyBuddy.saas.endpoints.test.gatewayUrl": {
+          "type": "string",
+          "default": "https://gateway.test.mokkybuddy.stapedev.it",
+          "description": "Gateway URL for TEST environment"
+        },
+        "mokkyBuddy.saas.endpoints.test.mockServerBaseUrl": {
+          "type": "string",
+          "default": "https://mock.test.mokkybuddy.stapedev.it",
+          "description": "Mock server base URL for TEST environment"
+        },
+        "mokkyBuddy.saas.endpoints.prod.gatewayUrl": {
+          "type": "string",
+          "default": "https://gateway.mokkybuddy.stapedev.it",
+          "description": "Gateway URL for PROD environment"
+        },
+        "mokkyBuddy.saas.endpoints.prod.mockServerBaseUrl": {
+          "type": "string",
+          "default": "https://mock.mokkybuddy.stapedev.it",
+          "description": "Mock server base URL for PROD environment"
+        },
+        "mokkyBuddy.saas.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API Key for authenticating with MokkyBuddy SAAS platform"
+        },
+        "mokkyBuddy.saas.mockServerBaseUrl": {
+          "type": "string",
+          "default": "https://mock.mokkybuddy.stapedev.it",
+          "description": "Base URL for accessing mock servers in SAAS mode"
         }
       }
     }
