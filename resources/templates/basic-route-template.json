@@ -1,0 +1,30 @@
+{
+  "method": "GET",
+  "path": "/api/resource",
+  "description": "Brief description of what this endpoint does",
+  "isEnabled": true,
+  "responses": [
+    {
+      "statusCode": 200,
+      "body": {
+        "success": true,
+        "data": []
+      },
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "delay": 0
+    },
+    {
+      "statusCode": 500,
+      "body": {
+        "error": "Internal server error"
+      },
+      "condition": "when error occurs"
+    }
+  ],
+  "inputSchema": {
+    "type": "object",
+    "properties": {}
+  }
+}

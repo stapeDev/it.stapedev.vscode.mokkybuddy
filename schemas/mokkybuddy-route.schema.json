@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mokkybuddy.stapedev.it/schemas/route.schema.json",
+  "title": "MokkyBuddy Route Definition Schema",
+  "description": "JSON Schema for defining mock API routes in MokkyBuddy SaaS platform",
+  "type": "object",
+  "required": ["method", "path", "responses"],
+  "properties": {
+    "method": {
+      "type": "string",
+      "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+      "title": "HTTP Method",
+      "description": "HTTP method for this route"
+    },
+    "path": {
+      "type": "string",
+      "title": "Route Path",
+      "description": "API path relative to server base URL (e.g. /api/users, /users/{id})",
+      "pattern": "^/[a-zA-Z0-9/_{}\\-]*$"
+    },
+    "description": {
+      "type": "string",
+      "title": "Route Description",
+      "description": "Human-readable description of what this route does",
+      "minLength": 0,
+      "maxLength": 500
+    },
+    "responses": {
+      "type": "array",
+      "title": "Response Definitions",
+      "description": "Array of response templates for different conditions",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["statusCode", "body"],
+        "properties": {
+          "statusCode": {
+            "type": "integer",
+            "title": "HTTP Status Code",
+            "description": "HTTP status code to return (e.g. 200, 201, 400, 404, 500)",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "body": {
+            "title": "Response Body",
+            "description": "Response body - can be object, array, string, number, boolean, or null"
+          },
+          "headers": {
+            "type": "object",
+            "title": "Response Headers",
+            "description": "Custom response headers",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "condition": {
+            "type": "string",
+            "title": "Response Condition",
+            "description": "Optional condition to determine when this response is used (e.g. 'query.error==true', 'body.type==premium')",
+            "minLength": 0,
+            "maxLength": 200
+          },
+          "delay": {
+            "type": "integer",
+            "title": "Response Delay",
+            "description": "Delay in milliseconds before sending response",
+            "minimum": 0,
+            "maximum": 60000
+          }
+        }
+      }
+    },
+    "inputSchema": {
+      "type": "object",
+      "title": "Input Request Schema",
+      "description": "JSON Schema for validating incoming request bodies. If provided, requests not matching this schema will be rejected",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["object", "array", "string", "number", "boolean"]
+        },
+        "properties": {
+          "type": "object",
+          "description": "Schema properties for object validation"
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Required fields for object validation"
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "title": "Tags",
+      "description": "Tags for organizing and categorizing routes",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 50
+      },
+      "maxItems": 10
+    },
+    "isEnabled": {
+      "type": "boolean",
+      "title": "Enable Route",
+      "description": "Whether this route is enabled or disabled",
+      "default": true
+    }
+  },
+  "examples": [
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "description": "List all users",
+      "responses": [
+        {
+          "statusCode": 200,
+          "body": [
+            {
+              "id": 1,
+              "name": "John Doe",
+              "email": "john@example.com"
+            }
+          ],
+          "headers": {
+            "Content-Type": "application/json",
+            "X-Total-Count": "1"
+          }
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/users",
+      "description": "Create a new user",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "email": { "type": "string" }
+        },
+        "required": ["name", "email"]
+      },
+      "responses": [
+        {
+          "statusCode": 201,
+          "body": {
+            "id": 1,
+            "name": "John Doe",
+            "email": "john@example.com",
+            "createdAt": "2026-05-11T00:00:00Z"
+          },
+          "condition": "request.body.email matches email format"
+        },
+        {
+          "statusCode": 400,
+          "body": {
+            "error": "Invalid email format"
+          },
+          "condition": "request body validation fails"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/{id}",
+      "description": "Get user by ID",
+      "responses": [
+        {
+          "statusCode": 200,
+          "body": {
+            "id": 1,
+            "name": "John Doe",
+            "email": "john@example.com"
+          }
+        },
+        {
+          "statusCode": 404,
+          "body": {
+            "error": "User not found"
+          },
+          "condition": "path.id doesn't exist"
+        }
+      ]
+    }
+  ]
+}

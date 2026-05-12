@@ -1,8 +1,8 @@
 {
   "name": "mokky-buddy-api-runner",
-  "displayName": "Mokky Buddy API Runner",
-  "description": "Run and manage mock APIs locally or in the cloud with SAAS mode",
-  "version": "2.0.0",
+  "displayName": "Mokky Buddy - Cloud API Manager",
+  "description": "Cloud-native API mock manager for MokkyBuddy SaaS platform. Create, edit, and manage mock APIs directly from VS Code.",
+  "version": "3.0.0",
   "publisher": "StapeDev",
   "icon": "resources/logo.png",
   "repository": {
@@ -10,33 +10,29 @@
     "url": "https://github.com/stapeDev/it.stapedev.vscode.mokkybuddy.git"
   },
   "engines": {
-    "vscode": "^1.79.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Developer Tools"
   ],
   "files": [
     "dist",
-    "resources/mokkyBuddyAPI.jar",
     "resources/logo.png",
     "resources/icon.svg",
-    "vss-extension.json",
     "LICENSE"
   ],
   "activationEvents": [
-    "onCommand:mokkyBuddyAPIRunner.toggleServer",
-    "onCommand:mokkyBuddyAPIRunner.addAPI",
-    "onCommand:mokkyBuddyAPIRunner.deleteAPI",
-    "onCommand:mokkyBuddyAPIRunner.previewJson",
-    "onCommand:mokkyBuddyAPIRunner.saveAPIConfig",
-    "onCommand:mokkyBuddyAPIRunner.loadAPIConfig",
-    "onCommand:mokkyBuddyAPIRunner.changePort",
-    "onCommand:mokkyBuddyAPIRunner.setApiKey",
-    "onCommand:mokkyBuddyAPIRunner.clearApiKey",
-    "onCommand:mokkyBuddyAPIRunner.createServer",
-    "onCommand:mokkyBuddyAPIRunner.deleteServer",
-    "onCommand:mokkyBuddyAPIRunner.syncRoutes",
-    "onCommand:mokkyBuddyAPIRunner.showKpi",
+    "onCommand:mokkyBuddy.setApiKey",
+    "onCommand:mokkyBuddy.clearApiKey",
+    "onCommand:mokkyBuddy.createServer",
+    "onCommand:mokkyBuddy.deleteServer",
+    "onCommand:mokkyBuddy.createRoute",
+    "onCommand:mokkyBuddy.editRoute",
+    "onCommand:mokkyBuddy.deleteRoute",
+    "onCommand:mokkyBuddy.testRoute",
+    "onCommand:mokkyBuddy.refreshServers",
+    "onCommand:mokkyBuddy.selectEnvironment",
     "onView:mokkyBuddyServerView"
   ],
   "main": "./dist/extension.js",
@@ -54,227 +50,155 @@
       "mokkyBuddy": [
         {
           "id": "mokkyBuddyServerView",
-          "name": "Server"
+          "name": "Servers & Routes",
+          "icon": "resources/icon.svg",
+          "contextualTitle": "MokkyBuddy Cloud Platform"
         }
       ]
     },
     "commands": [
       {
-        "command": "mokkyBuddyAPIRunner.toggleServer",
-        "title": "Start/Stop Mokky Buddy Server"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.addAPI",
-        "title": "Add API Route"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.deleteAPI",
-        "title": "Delete API Route"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.previewJson",
-        "title": "Preview JSON"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.saveAPIConfig",
-        "title": "Save API Config"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.loadAPIConfig",
-        "title": "Load API Config"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.changePort",
-        "title": "MokkyBuddy: Set Server Port"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.selectApiMode",
-        "title": "MokkyBuddy: Select API Mode"
-      },
-      {
-        "command": "mokkyBuddyAPIRunner.setApiKey",
-        "title": "MokkyBuddy: Set API Key",
+        "command": "mokkyBuddy.setApiKey",
+        "title": "Set API Key",
+        "category": "MokkyBuddy",
         "icon": "$(key)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.clearApiKey",
-        "title": "MokkyBuddy: Clear API Key",
+        "command": "mokkyBuddy.clearApiKey",
+        "title": "Clear API Key",
+        "category": "MokkyBuddy",
         "icon": "$(close)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.createServer",
-        "title": "MokkyBuddy: Create New Server",
+        "command": "mokkyBuddy.createServer",
+        "title": "Create New Server",
+        "category": "MokkyBuddy",
         "icon": "$(add)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.deleteServer",
-        "title": "MokkyBuddy: Delete Server",
+        "command": "mokkyBuddy.deleteServer",
+        "title": "Delete Server",
+        "category": "MokkyBuddy",
         "icon": "$(trash)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.syncRoutes",
-        "title": "MokkyBuddy: Sync Routes to Cloud",
-        "icon": "$(cloud-upload)"
+        "command": "mokkyBuddy.createRoute",
+        "title": "Create New Route",
+        "category": "MokkyBuddy",
+        "icon": "$(add)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.showKpi",
-        "title": "MokkyBuddy: Show KPI Dashboard",
-        "icon": "$(graph)"
+        "command": "mokkyBuddy.editRoute",
+        "title": "Edit Route",
+        "category": "MokkyBuddy",
+        "icon": "$(edit)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.refreshServers",
-        "title": "MokkyBuddy: Refresh Servers",
+        "command": "mokkyBuddy.deleteRoute",
+        "title": "Delete Route",
+        "category": "MokkyBuddy",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "mokkyBuddy.testRoute",
+        "title": "Test Route",
+        "category": "MokkyBuddy",
+        "icon": "$(play)"
+      },
+      {
+        "command": "mokkyBuddy.refreshServers",
+        "title": "Refresh Servers",
+        "category": "MokkyBuddy",
         "icon": "$(refresh)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.editRoute",
-        "title": "MokkyBuddy: Edit Route"
+        "command": "mokkyBuddy.selectEnvironment",
+        "title": "Select Environment",
+        "category": "MokkyBuddy",
+        "icon": "$(server-environment)"
       },
       {
-        "command": "mokkyBuddyAPIRunner.selectEnvironment",
-        "title": "MokkyBuddy: Select Environment",
-        "icon": "$(server-environment)"
+        "command": "mokkyBuddy.insertSnippet",
+        "title": "Insert Route Snippet",
+        "category": "MokkyBuddy",
+        "icon": "$(code)",
+        "when": "resourceExtname == .json"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "mokkyBuddyAPIRunner.refreshServers",
-          "when": "view == mokkyBuddyServerView",
-          "group": "navigation"
-        },
-        {
-          "command": "mokkyBuddyAPIRunner.selectEnvironment",
-          "when": "view == mokkyBuddyServerView",
-          "group": "navigation"
-        },
-        {
-          "command": "mokkyBuddyAPIRunner.setApiKey",
+          "command": "mokkyBuddy.setApiKey",
           "when": "view == mokkyBuddyServerView && !mokkyBuddy.hasApiKey",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
-          "command": "mokkyBuddyAPIRunner.clearApiKey",
+          "command": "mokkyBuddy.clearApiKey",
           "when": "view == mokkyBuddyServerView && mokkyBuddy.hasApiKey",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "mokkyBuddy.refreshServers",
+          "when": "view == mokkyBuddyServerView && mokkyBuddy.hasApiKey",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mokkyBuddy.createServer",
+          "when": "view == mokkyBuddyServerView && mokkyBuddy.hasApiKey",
+          "group": "navigation@3"
+        },
+        {
+          "command": "mokkyBuddy.createRoute",
+          "when": "view == mokkyBuddyServerView && mokkyBuddy.hasApiKey",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
         {
-          "command": "mokkyBuddyAPIRunner.changePort",
+          "command": "mokkyBuddy.deleteServer",
           "when": "view == mokkyBuddyServerView && viewItem == serverNode",
-          "group": "inline"
+          "group": "inline@1"
         },
         {
-          "command": "mokkyBuddyAPIRunner.deleteServer",
-          "when": "view == mokkyBuddyServerView && viewItem == saasServerNode",
-          "group": "inline"
+          "command": "mokkyBuddy.createRoute",
+          "when": "view == mokkyBuddyServerView && viewItem == serverNode",
+          "group": "inline@2"
         },
         {
-          "command": "mokkyBuddyAPIRunner.syncRoutes",
-          "when": "view == mokkyBuddyServerView && viewItem == serverNode && mokkyBuddy.hasApiKey",
-          "group": "inline"
+          "command": "mokkyBuddy.editRoute",
+          "when": "view == mokkyBuddyServerView && viewItem == routeNode",
+          "group": "inline@1"
+        },
+        {
+          "command": "mokkyBuddy.testRoute",
+          "when": "view == mokkyBuddyServerView && viewItem == routeNode",
+          "group": "inline@2"
+        },
+        {
+          "command": "mokkyBuddy.deleteRoute",
+          "when": "view == mokkyBuddyServerView && viewItem == routeNode",
+          "group": "inline@3"
         }
       ]
     },
     "configuration": {
       "type": "object",
-      "title": "Mokky Buddy Settings",
+      "title": "MokkyBuddy Settings",
       "properties": {
-        "mokkyBuddy.javaPath": {
-          "type": "string",
-          "default": "java",
-          "description": "Full path to the Java executable to use for starting the Mokky Buddy server."
-        },
-        "mokkyBuddy.serverPort": {
-          "type": "number",
-          "default": 8081,
-          "description": "Port on which the Mokky Buddy server will run (file/database mode)"
-        },
-        "mokkyBuddy.apiMode": {
-          "type": "string",
-          "enum": [
-            "file",
-            "database",
-            "saas"
-          ],
-          "enumDescriptions": [
-            "Store APIs in local JSON files",
-            "Store APIs in local H2 database",
-            "Connect to MokkyBuddy cloud platform"
-          ],
-          "default": "file",
-          "description": "Select how Mokky Buddy APIs are stored and managed."
-        },
-        "mokkyBuddy.saas.environment": {
-          "type": "string",
-          "enum": [
-            "local",
-            "dev",
-            "test",
-            "prod"
-          ],
-          "enumDescriptions": [
-            "Local development (localhost:8090)",
-            "Development server",
-            "Test/Staging server",
-            "Production server"
-          ],
-          "default": "local",
-          "description": "Select the SAAS environment to connect to"
-        },
-        "mokkyBuddy.saas.endpoints.local.gatewayUrl": {
-          "type": "string",
-          "default": "http://localhost:8090",
-          "description": "Gateway URL for LOCAL environment"
-        },
-        "mokkyBuddy.saas.endpoints.local.mockServerBaseUrl": {
-          "type": "string",
-          "default": "http://localhost:8083",
-          "description": "Mock server base URL for LOCAL environment"
-        },
-        "mokkyBuddy.saas.endpoints.dev.gatewayUrl": {
-          "type": "string",
-          "default": "https://gateway.dev.mokkybuddy.stapedev.it",
-          "description": "Gateway URL for DEV environment"
-        },
-        "mokkyBuddy.saas.endpoints.dev.mockServerBaseUrl": {
-          "type": "string",
-          "default": "https://mock.dev.mokkybuddy.stapedev.it",
-          "description": "Mock server base URL for DEV environment"
-        },
-        "mokkyBuddy.saas.endpoints.test.gatewayUrl": {
-          "type": "string",
-          "default": "https://gateway.test.mokkybuddy.stapedev.it",
-          "description": "Gateway URL for TEST environment"
-        },
-        "mokkyBuddy.saas.endpoints.test.mockServerBaseUrl": {
-          "type": "string",
-          "default": "https://mock.test.mokkybuddy.stapedev.it",
-          "description": "Mock server base URL for TEST environment"
-        },
-        "mokkyBuddy.saas.endpoints.prod.gatewayUrl": {
-          "type": "string",
-          "default": "https://gateway.mokkybuddy.stapedev.it",
-          "description": "Gateway URL for PROD environment"
-        },
-        "mokkyBuddy.saas.endpoints.prod.mockServerBaseUrl": {
-          "type": "string",
-          "default": "https://mock.mokkybuddy.stapedev.it",
-          "description": "Mock server base URL for PROD environment"
-        },
-        "mokkyBuddy.saas.apiKey": {
+        "mokkyBuddy.apiKey": {
           "type": "string",
           "default": "",
-          "description": "API Key for authenticating with MokkyBuddy SAAS platform"
-        },
-        "mokkyBuddy.saas.mockServerBaseUrl": {
-          "type": "string",
-          "default": "https://mock.mokkybuddy.stapedev.it",
-          "description": "Base URL for accessing mock servers in SAAS mode"
+          "description": "API Key for MokkyBuddy SaaS platform",
+          "scope": "application"
         }
       }
-    }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "*.mokky.json",
+        "url": "./schemas/mokkybuddy-route.schema.json"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package-prod",
@@ -292,29 +216,24 @@
     "test": "jest --config jest.config.js --runInBand"
   },
   "devDependencies": {
-    "@types/form-data": "^2.5.2",
     "@types/chai": "^5.2.2",
     "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.11",
     "@types/node-fetch": "^2.6.13",
-    "@types/vscode": "^1.104.0",
-    "@types/sinon": "^17.0.4",
-    "@typescript-eslint/parser": "^8.41.0",
-    "@typescript-eslint/eslint-plugin": "^8.41.0",
-    "@vscode/test-electron": "^2.5.2",
-    "chai": "^4.5.0",
-    "esbuild": "^0.25.9",
-    "jest": "^30.1.3",
-    "eslint": "^9.36.0",
-    "mocha": "^11.7.2",
-    "sinon": "^21.0.0",
-    "ts-jest": "^29.4.1",
-    "typescript": "^5.9.2",
-    "vscode": "^1.1.37"
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.57.1",
+    "@typescript-eslint/parser": "^8.57.1",
+    "@vscode/test-electron": "^2.4.5",
+    "chai": "^5.1.2",
+    "esbuild": "^0.24.2",
+    "eslint": "^8.57.1",
+    "jest": "^30.0.0-alpha.7",
+    "npm-run-all": "^4.1.5",
+    "ts-jest": "^30.0.0-alpha.6",
+    "typescript": "^5.7.3"
   },
   "dependencies": {
-    "form-data": "^4.0.4",
     "node-fetch": "^2.7.0"
   }
 }

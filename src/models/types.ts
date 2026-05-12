@@ -244,17 +244,8 @@ export interface MokkyBuddyConfig {
     javaPath: string;
     serverPort: number;
     apiMode: ApiMode;
-    saas: {
-        environment: Environment;
-        tenantName: string;
-        autoRefreshToken: boolean;
-        endpoints: EnvironmentConfig;
-    };
-}
-
-// Helper to get current environment endpoints
-export function getEnvironmentEndpoints(config: MokkyBuddyConfig): EnvironmentEndpoints {
-    return config.saas.endpoints[config.saas.environment];
+    apiKey?: string;
+    gatewayUrl?: string; // Hidden setting for dev override
 }
 
 // ============================================

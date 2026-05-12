@@ -1,0 +1,233 @@
+{
+  "snippets": [
+    {
+      "id": "simple-get",
+      "name": "Simple GET Response",
+      "description": "Basic GET endpoint returning JSON array",
+      "template": {
+        "method": "GET",
+        "path": "/api/items",
+        "description": "Fetch all items",
+        "responses": [
+          {
+            "statusCode": 200,
+            "body": [
+              { "id": 1, "name": "Item 1", "price": 29.99 },
+              { "id": 2, "name": "Item 2", "price": 39.99 }
+            ],
+            "headers": {
+              "Content-Type": "application/json",
+              "X-Total-Count": "2"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "get-with-conditions",
+      "name": "GET with Multiple Responses",
+      "description": "GET with different responses based on conditions",
+      "template": {
+        "method": "GET",
+        "path": "/api/status",
+        "description": "Check system status",
+        "responses": [
+          {
+            "statusCode": 200,
+            "body": { "status": "healthy", "uptime": "99.99%" },
+            "condition": "normal operation"
+          },
+          {
+            "statusCode": 503,
+            "body": { "status": "maintenance", "message": "System under maintenance" },
+            "condition": "during maintenance window"
+          }
+        ]
+      }
+    },
+    {
+      "id": "post-with-validation",
+      "name": "POST with Input Validation",
+      "description": "POST endpoint with request body validation",
+      "template": {
+        "method": "POST",
+        "path": "/api/users",
+        "description": "Create new user",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "email": { "type": "string" },
+            "age": { "type": "integer" }
+          },
+          "required": ["name", "email"]
+        },
+        "responses": [
+          {
+            "statusCode": 201,
+            "body": {
+              "id": 123,
+              "name": "John Doe",
+              "email": "john@example.com",
+              "createdAt": "2026-05-11T12:00:00Z"
+            }
+          },
+          {
+            "statusCode": 400,
+            "body": { "error": "Validation failed", "details": [] },
+            "condition": "validation fails"
+          }
+        ]
+      }
+    },
+    {
+      "id": "crud-operations",
+      "name": "CRUD Operations Suite",
+      "description": "Complete CRUD endpoint set for a resource",
+      "template": {
+        "method": "GET",
+        "path": "/api/products/{id}",
+        "description": "Get product by ID",
+        "responses": [
+          {
+            "statusCode": 200,
+            "body": {
+              "id": 1,
+              "name": "Product Name",
+              "description": "Product description",
+              "price": 99.99,
+              "inStock": true
+            }
+          },
+          {
+            "statusCode": 404,
+            "body": { "error": "Product not found" },
+            "condition": "product ID doesn't exist"
+          }
+        ]
+      }
+    },
+    {
+      "id": "async-response",
+      "name": "Async Response with Delay",
+      "description": "Response with artificial delay to simulate processing",
+      "template": {
+        "method": "POST",
+        "path": "/api/process",
+        "description": "Process async job",
+        "responses": [
+          {
+            "statusCode": 202,
+            "body": {
+              "jobId": "job_12345",
+              "status": "processing",
+              "estimatedTime": 5000
+            },
+            "delay": 1000
+          }
+        ]
+      }
+    },
+    {
+      "id": "error-responses",
+      "name": "Error Response Examples",
+      "description": "Common error response patterns",
+      "template": {
+        "method": "PUT",
+        "path": "/api/items/{id}",
+        "description": "Update item",
+        "responses": [
+          {
+            "statusCode": 200,
+            "body": { "id": 1, "updated": true }
+          },
+          {
+            "statusCode": 400,
+            "body": { "error": "Bad request", "message": "Invalid input" }
+          },
+          {
+            "statusCode": 401,
+            "body": { "error": "Unauthorized", "message": "Missing API key" }
+          },
+          {
+            "statusCode": 404,
+            "body": { "error": "Not found", "message": "Item doesn't exist" }
+          },
+          {
+            "statusCode": 429,
+            "body": { "error": "Rate limited", "retryAfter": 60 }
+          },
+          {
+            "statusCode": 500,
+            "body": { "error": "Internal server error" }
+          }
+        ]
+      }
+    },
+    {
+      "id": "batch-operations",
+      "name": "Batch Operations",
+      "description": "Batch create/update operations",
+      "template": {
+        "method": "POST",
+        "path": "/api/items/batch",
+        "description": "Create multiple items",
+        "inputSchema": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" }
+            },
+            "required": ["name"]
+          }
+        },
+        "responses": [
+          {
+            "statusCode": 201,
+            "body": {
+              "created": 10,
+              "failed": 0,
+              "ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "pagination",
+      "name": "Paginated Response",
+      "description": "Response with pagination metadata",
+      "template": {
+        "method": "GET",
+        "path": "/api/items",
+        "description": "List items with pagination",
+        "responses": [
+          {
+            "statusCode": 200,
+            "body": {
+              "data": [
+                { "id": 1, "name": "Item 1" },
+                { "id": 2, "name": "Item 2" },
+                { "id": 3, "name": "Item 3" }
+              ],
+              "pagination": {
+                "page": 1,
+                "pageSize": 3,
+                "total": 50,
+                "totalPages": 17,
+                "hasNext": true
+              }
+            },
+            "headers": {
+              "X-Page": "1",
+              "X-Page-Size": "3",
+              "X-Total": "50"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -56,7 +56,7 @@ export class ApiKeyService {
     private loadApiKey(): void {
         // First try from settings
         const config = vscode.workspace.getConfiguration('mokkyBuddy');
-        const settingsApiKey = config.get<string>('saas.apiKey');
+        const settingsApiKey = config.get<string>('apiKey');
         
         if (settingsApiKey) {
             this.cachedApiKey = settingsApiKey;
@@ -80,6 +80,10 @@ export class ApiKeyService {
 
         this.cachedApiKey = apiKey.trim();
         
+        // Store in settings for visual feedback and persistence
+        const config = vscode.workspace.getConfiguration('mokkyBuddy');
+        await config.update('apiKey', this.cachedApiKey, vscode.ConfigurationTarget.Global);
+        
         // Store in global state for persistence
         await this.globalState.update(API_KEY_STORAGE_KEY, this.cachedApiKey);
         
@@ -98,7 +102,7 @@ export class ApiKeyService {
     getApiKey(): string | null {
         // Reload from settings in case it changed
         const config = vscode.workspace.getConfiguration('mokkyBuddy');
-        const settingsApiKey = config.get<string>('saas.apiKey');
+        const settingsApiKey = config.get<string>('apiKey');
         
         if (settingsApiKey) {
             this.cachedApiKey = settingsApiKey;
@@ -119,6 +123,10 @@ export class ApiKeyService {
      */
     async clearApiKey(): Promise<void> {
         this.cachedApiKey = null;
+        
+        // Clear from settings
+        const config = vscode.workspace.getConfiguration('mokkyBuddy');
+        await config.update('apiKey', undefined, vscode.ConfigurationTarget.Global);
         
         // Clear from storage
         await this.globalState.update(API_KEY_STORAGE_KEY, undefined);

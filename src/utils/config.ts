@@ -27,35 +27,12 @@ export class ConfigManager {
     getConfig(): MokkyBuddyConfig {
         const config = vscode.workspace.getConfiguration('mokkyBuddy');
         
-        const endpoints: EnvironmentConfig = {
-            local: {
-                gatewayUrl: config.get<string>('saas.endpoints.local.gatewayUrl') ?? 'http://localhost:8090',
-                mockServerBaseUrl: config.get<string>('saas.endpoints.local.mockServerBaseUrl') ?? 'http://localhost:8083'
-            },
-            dev: {
-                gatewayUrl: config.get<string>('saas.endpoints.dev.gatewayUrl') ?? 'https://gateway.dev.mokkybuddy.stapedev.it',
-                mockServerBaseUrl: config.get<string>('saas.endpoints.dev.mockServerBaseUrl') ?? 'https://mock.dev.mokkybuddy.stapedev.it'
-            },
-            test: {
-                gatewayUrl: config.get<string>('saas.endpoints.test.gatewayUrl') ?? 'https://gateway.test.mokkybuddy.stapedev.it',
-                mockServerBaseUrl: config.get<string>('saas.endpoints.test.mockServerBaseUrl') ?? 'https://mock.test.mokkybuddy.stapedev.it'
-            },
-            prod: {
-                gatewayUrl: config.get<string>('saas.endpoints.prod.gatewayUrl') ?? 'https://gateway.mokkybuddy.stapedev.it',
-                mockServerBaseUrl: config.get<string>('saas.endpoints.prod.mockServerBaseUrl') ?? 'https://mock.mokkybuddy.stapedev.it'
-            }
-        };
-
         return {
             javaPath: config.get<string>('javaPath') ?? 'java',
             serverPort: config.get<number>('serverPort') ?? 8081,
-            apiMode: config.get<ApiMode>('apiMode') ?? 'file',
-            saas: {
-                environment: config.get<Environment>('saas.environment') ?? 'local',
-                tenantName: config.get<string>('saas.tenantName') ?? 'default',
-                autoRefreshToken: config.get<boolean>('saas.autoRefreshToken') ?? true,
-                endpoints
-            }
+            apiMode: config.get<ApiMode>('apiMode') ?? 'saas',
+            apiKey: config.get<string>('apiKey'),
+            gatewayUrl: config.get<string>('gatewayUrl')
         };
     }
 
@@ -63,51 +40,44 @@ export class ConfigManager {
      * Get the current API mode
      */
     getApiMode(): ApiMode {
-        return this.getConfig().apiMode;
+        return this.getConfig().apiMode || 'saas';
     }
 
     /**
      * Check if current mode is SAAS
      */
     isSaasMode(): boolean {
-        return this.getApiMode() === 'saas';
+        return true; // Per utente finale è solo SAAS ora
     }
 
     /**
      * Check if current mode is local (file or database)
      */
     isLocalMode(): boolean {
-        const mode = this.getApiMode();
-        return mode === 'file' || mode === 'database';
+        return false;
     }
 
     /**
      * Get current environment
      */
     getEnvironment(): Environment {
-        return this.getConfig().saas.environment;
+        return 'prod';
     }
 
     /**
-     * Get current environment endpoints
-     */
-    getCurrentEndpoints(): EnvironmentEndpoints {
-        const config = this.getConfig();
-        return config.saas.endpoints[config.saas.environment];
-    }
-
-    /**
-     * Get Gateway URL for current environment
+     * Get Gateway URL
      */
     getGatewayUrl(): string {
-        return this.getCurrentEndpoints().gatewayUrl;
+        const config = this.getConfig();
+        // Default to production, but allow hidden override for local development
+        return config.gatewayUrl || 'http://localhost:8090';
     }
 
     /**
-     * Get Mock Server Base URL for current environment
+     * Get Mock Server Base URL
      */
     getMockServerBaseUrl(): string {
-        return this.getCurrentEndpoints().mockServerBaseUrl;
+        return 'http://localhost:8090';
     }
 
     /**
@@ -146,54 +116,13 @@ export class ConfigManager {
     }
 
     /**
-     * Update the environment
-     */
-    async setEnvironment(env: Environment): Promise<void> {
-        const config = vscode.workspace.getConfiguration('mokkyBuddy');
-        await config.update('saas.environment', env, vscode.ConfigurationTarget.Global);
-    }
-
-    /**
-     * Update the server port
-     */
-    async setServerPort(port: number): Promise<void> {
-        const config = vscode.workspace.getConfiguration('mokkyBuddy');
-        await config.update('serverPort', port, vscode.ConfigurationTarget.Global);
-    }
-
-    /**
-     * Update SAAS gateway URL for a specific environment
-     */
-    async setGatewayUrl(env: Environment, url: string): Promise<void> {
-        const config = vscode.workspace.getConfiguration('mokkyBuddy');
-        await config.update(`saas.endpoints.${env}.gatewayUrl`, url, vscode.ConfigurationTarget.Global);
-    }
-
-    /**
-     * Update SAAS mock server URL for a specific environment
-     */
-    async setMockServerBaseUrl(env: Environment, url: string): Promise<void> {
-        const config = vscode.workspace.getConfiguration('mokkyBuddy');
-        await config.update(`saas.endpoints.${env}.mockServerBaseUrl`, url, vscode.ConfigurationTarget.Global);
-    }
-
-    /**
      * Get environment display info
      */
     getEnvironmentInfo(): { name: string; emoji: string; gatewayUrl: string } {
-        const env = this.getEnvironment();
-        const endpoints = this.getCurrentEndpoints();
-        
-        const envInfo: Record<Environment, { name: string; emoji: string }> = {
-            local: { name: 'Local', emoji: '🏠' },
-            dev: { name: 'Development', emoji: '🔧' },
-            test: { name: 'Test/Staging', emoji: '🧪' },
-            prod: { name: 'Production', emoji: '🚀' }
-        };
-
         return {
-            ...envInfo[env],
-            gatewayUrl: endpoints.gatewayUrl
+            name: 'Cloud',
+            emoji: '🚀',
+            gatewayUrl: this.getGatewayUrl()
         };
     }
 
